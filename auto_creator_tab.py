@@ -708,8 +708,9 @@ class AutoCreatorWorker(QRunnable):
         elif method == 'recharge':
             userId, password, token = tasks[0][3:6]
             if not await self.recharge(userId):
-                Globals._Log.info(self.user, f'processing: {phone} recharge successfully')
+                Globals._Log.error(self.user, f'processing: {phone} recharge failed')
                 return
+            Globals._Log.info(self.user, f'processing: {phone} recharge successfully')
             tasks.append(await self.make_consume_task(phone, password, token))
         elif method == 'consume':
             password, token = tasks[0][3:5]
