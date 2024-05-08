@@ -267,9 +267,9 @@ class DBSchema(object):
                 "isAgent": "BOOLEAN",
                 "startTime": "TEXT",
                 "endTime": "TEXT",
-                "expected": "TEXT",
+                "expected": "INTEGER",
                 "remainTasks": "TEXT",
-                "isCompleted": "TEXT",
+                "isCompleted": "BOOLEAN",
                 "updateTime": "TEXT"
             },
             "primary": "(id)"

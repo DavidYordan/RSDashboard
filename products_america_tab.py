@@ -102,7 +102,7 @@ class ProductsAmericaTab(QWidget):
         Globals._WS.toggle_components_signal.emit(False)
         Globals._WS.toggle_progress_bar_signal.emit(True)
         Globals._WS.set_progress_bar_title_signal.emit('Updating Products')
-        Globals._WS.update_progress_signal.emit('0/0', 0)
+        Globals._WS.update_message_signal.emit('0/0', 0)
         page = 1
         retry_count = 3
         totalPage = 0
@@ -132,7 +132,7 @@ class ProductsAmericaTab(QWidget):
             totalCount = datas.get('totalCount', 0)
             products = datas.get('list', [])
             currentCount += len(products)
-            Globals._WS.update_progress_signal.emit(f'{currentCount}/{totalCount}', int((currentCount / totalCount) * 100))
+            Globals._WS.update_message_signal.emit(f'{currentCount}/{totalCount}', int((currentCount / totalCount) * 100))
             Globals._WS.database_operation_signal.emit('bulk_upsert',{
                 'table_name': 'products_america',
                 'columns': products[0].keys(),

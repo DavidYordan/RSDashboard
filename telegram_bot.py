@@ -68,7 +68,7 @@ class TelegramBot(QRunnable):
 
     def start_task(self):
         if not self.is_running:
-            Globals.thread_pool.start(self)
+            Globals.thread_pool_global.start(self)
 
     def stop_task(self):
         self.is_running = False

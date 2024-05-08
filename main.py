@@ -17,7 +17,6 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QMainWindow,
     QPushButton,
-    QSizePolicy,
     QSplitter,
     QStyleFactory,
     QTableWidget,
@@ -30,6 +29,7 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
 
 from auto_creator_tab import AutoCreatorTab
+from concurrent_requests import AdminRequests
 from globals import Globals
 from users_america_tab import UsersAmericaTab
 
@@ -130,8 +130,9 @@ class RSDashboard(QMainWindow):
         self.create_menu()
         self.create_main_panel()
 
-        Globals.requests_thread_pool.setMaxThreadCount(5)
-        Globals.thread_pool.setMaxThreadCount(10)
+        Globals.thread_pool_global.setMaxThreadCount(50)
+
+        Globals._requests_admin = AdminRequests()
 
         self.user = 'RSDashboard'
 
@@ -145,7 +146,7 @@ class RSDashboard(QMainWindow):
 
     def closeEvent(self, event):
         Globals.is_app_running = False
-        Globals.thread_pool.waitForDone()
+        Globals.thread_pool_global.waitForDone()
         super().closeEvent(event)
 
     def create_menu(self):

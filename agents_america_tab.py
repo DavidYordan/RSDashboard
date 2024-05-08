@@ -104,7 +104,7 @@ class AgentsAmericaTab(QWidget):
         Globals._WS.toggle_components_signal.emit(False)
         Globals._WS.toggle_progress_bar_signal.emit(True)
         Globals._WS.set_progress_bar_title_signal.emit('Updating agents')
-        Globals._WS.update_progress_signal.emit('0/0', 0)
+        Globals._WS.update_message_signal.emit('0/0', 0)
         page = 1
         retry_count = 3
         totalPage = 0
@@ -134,7 +134,7 @@ class AgentsAmericaTab(QWidget):
             totalCount = datas.get('totalCount', 0)
             agents = datas.get('list', [])
             currentCount += len(agents)
-            Globals._WS.update_progress_signal.emit(f'{currentCount}/{totalCount}', int((currentCount / totalCount) * 100))
+            Globals._WS.update_message_signal.emit(f'{currentCount}/{totalCount}', int((currentCount / totalCount) * 100))
             Globals._WS.database_operation_signal.emit('bulk_upsert',{
                 'table_name': 'agents_america',
                 'columns': agents[0].keys(),

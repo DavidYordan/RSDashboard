@@ -1,4 +1,4 @@
-import asyncio
+import itertools
 import pytz
 import random
 import requests
@@ -7,8 +7,6 @@ import time
 
 from ast import literal_eval
 from datetime import datetime, timedelta
-from faker import Faker
-from pypinyin import pinyin, Style
 from PyQt6.QtCore import(
     pyqtSlot,
     QDateTime,
@@ -30,14 +28,14 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QMenu,
     QPushButton,
-    QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
     QWidget
 )
-from queue import Queue
+from queue import Queue, PriorityQueue
 
-from globals import Globals
+from concurrent_requests import AdminRequests, UserRequests
+from globals import Globals, TableWidget
 
 class AutoCreatorTab(QWidget):
     def __init__(
@@ -53,8 +51,8 @@ class AutoCreatorTab(QWidget):
 
         self.autoCreatorWorker = AutoCreatorWorker()
 
-        Globals._WS.autoCreatorTab_update_row_signal.connect(self.update_row)
         Globals._WS.autoCreatorTab_add_creator_signal.connect(self.add_creator)
+        Globals._WS.autoCreatorTab_update_row_signal.connect(self.update_row)
 
         self.user = 'AutoCreatorTab'
 
@@ -74,8 +72,6 @@ class AutoCreatorTab(QWidget):
         for col_index, col_name in enumerate(self.columns):
             if col_name in data:
                 item_value = str(data[col_name])
-                if col_name == 'userId':
-                    item_value = item_value.zfill(6)
             else:
                 item_value = ''
             cell_item = QTableWidgetItem(item_value)
@@ -84,38 +80,20 @@ class AutoCreatorTab(QWidget):
     def cell_was_clicked(self):
         current_index = self.table.currentIndex()
         text = self.table.item(current_index.row(), current_index.column()).text()
-        if self.columns[current_index.column()] == 'userId':
-            text = text.lstrip('0')
         Globals._log_label.setText(text)
 
     def cell_was_double_clicked(self):
         pass
 
-    def find_row_by_columnName(self, columnValue, columnName='userId'):
+    def find_row_by_columnName(self, columnValue, columnName='id'):
         column_index = self.columns.index(columnName)
         for row in range(self.table.rowCount()):
             item = self.table.item(row, column_index)
-            if item and item.text() == columnValue:
+            if item and item.text() == str(columnValue):
                 return row
         return -1
 
-    def find_userId_by_phone(self, phone):
-        phone_index = self.columns.index('phone')
-        user_id_index = self.columns.index('userId')
-        
-        for row in range(self.table.rowCount()):
-            phone_item = self.table.item(row, phone_index)
-            if phone_item:
-                current_phone = phone_item.text()
-                if current_phone == phone:
-                    user_id_item = self.table.item(row, user_id_index)
-                    if user_id_item:
-                        return user_id_item.text()
-    
-        return None
-
     def reload(self):
-        self.table.setSortingEnabled(False)
         self.table.setRowCount(0)
         q = Queue()
         Globals._WS.database_operation_signal.emit('read', {'table_name': 'auto_creator'}, q)
@@ -126,8 +104,6 @@ class AutoCreatorTab(QWidget):
             for idx, col in enumerate(self.columns):
                 row_data[col] = data[idx]
             self.add_row(row_data)
-
-        self.table.setSortingEnabled(True)
 
         Globals._Log.info(self.user, 'Reload completed')
 
@@ -146,15 +122,13 @@ class AutoCreatorTab(QWidget):
 
         middle_layout = QHBoxLayout()
         layout.addLayout(middle_layout)
-        self.table = QTableWidget(0, len(self.columns))
+        self.table = TableWidget(0, len(self.columns))
+        self.table.setNumericColumns([self.columns.index(column) for column in ['id', 'userId', 'isAgent', 'expected', 'isCompleted']])
         middle_layout.addWidget(self.table)
         self.table.setHorizontalHeaderLabels(self.columns)
 
-        self.table.sortItems(self.columns.index('id'), Qt.SortOrder.AscendingOrder)
         self.table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        # self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
-        # self.table.setColumnWidth(0, 5)
 
         self.table.mousePressEvent = self.table_mouse_press_event
         self.table.cellClicked.connect(self.cell_was_clicked)
@@ -180,20 +154,18 @@ class AutoCreatorTab(QWidget):
                 return
             self.show_context_menu(event.pos(), index)
         else:
-            QTableWidget.mousePressEvent(self.table, event)
+            TableWidget.mousePressEvent(self.table, event)
 
     @pyqtSlot(dict)
     def update_row(self, data):
-        row = self.find_row_by_columnName(str(data['userId']).zfill(6))
-        self.table.setSortingEnabled(False)
+        row = self.find_row_by_columnName(data['id'])
         if row == -1:
             self.add_row(data)
         else:
             for key, value in data.items():
-                if key == 'userId':
+                if key == 'id':
                     continue
                 self.table.item(row, self.columns.index(key)).setText(str(value))
-        self.table.setSortingEnabled(True)
 
 class AddCreatorDialog(QDialog):
     def __init__(self, parent, data={}):
@@ -201,8 +173,6 @@ class AddCreatorDialog(QDialog):
 
         self.columns_creator = []
         self.columns_user = []
-        self.emailGenerator = EmailGenerator()
-        self.phoneGenerator = PhoneGenerator()
         self.queue = Queue()
         self.tz = pytz.timezone('Asia/Shanghai')
         self.user = 'AddCreatorDialog'
@@ -258,7 +228,7 @@ class AddCreatorDialog(QDialog):
         self.label_userId.setText(str(data.get('userId', '')))
         self.lineedit_phone.setText(data.get('phone', ''))
         self.label_invitationCode.setText(data.get('invitationCode', ''))
-        self.combo_isAgent.setCurrentText(str(data.get('isAgent', False)))
+        self.combo_isAgent.setCurrentText(str(data.get('isAgent', 0)))
         self.lineedit_expected.setText(str(data.get('expected', 2)))
 
     def make_tasks(self):
@@ -270,22 +240,18 @@ class AddCreatorDialog(QDialog):
         tasks_count = expected // 2
         random_seconds = random.sample(range(startTime, endTime), phone_count + email_count)
 
-        phones = [self.phoneGenerator.get_number() for _ in range(phone_count)]
-        emails = [self.emailGenerator.get_email() for _ in range(email_count)]
-
-        task_phones = phones[:tasks_count]
-        remain_phones = phones[tasks_count:]
-
-        random.shuffle(random_seconds)
-        contacts = phones + emails
         tasks = []
 
-        for sec, cont in zip(random_seconds, contacts):
-            task_type = 'super_create' if cont in task_phones else 'create'
+        for idx, sec in enumerate(random_seconds):
             formatted_time = datetime.fromtimestamp(sec, self.tz).strftime('%Y-%m-%d %H:%M:%S')
-            tasks.append([task_type, formatted_time, cont])
+            if idx < tasks_count:
+                tasks.append([formatted_time, 'super_create', 'phone'])
+            elif idx < phone_count:
+                tasks.append([formatted_time, 'create', 'phone'])
+            else:
+                tasks.append([formatted_time, 'create', 'email'])
 
-        remainTasks = sorted(tasks, key=lambda x: x[1])
+        remainTasks = sorted(tasks, key=lambda x: x[0])
 
         return {
             'startTime': datetime.fromtimestamp(startTime, self.tz).strftime('%Y-%m-%d %H:%M:%S'),
@@ -293,10 +259,6 @@ class AddCreatorDialog(QDialog):
             'expected': expected,
             'remainTasks': str(remainTasks)
         }
-
-    def random_call(self):
-        selected_method = random.choices([self.emailGenerator.generate_email, self.get_number], [0.6, 0.4], k=1)[0]
-        return selected_method()
 
     def setup_ui(self):
         layout = QVBoxLayout(self)
@@ -334,7 +296,7 @@ class AddCreatorDialog(QDialog):
         layout_isAgent = QHBoxLayout()
         layout_isAgent.addWidget(QLabel('Is Agent:'))
         self.combo_isAgent = QComboBox(self)
-        self.combo_isAgent.addItems(['False', 'True'])
+        self.combo_isAgent.addItems(['0', '1'])
         layout_isAgent.addWidget(self.combo_isAgent)
         layout.addLayout(layout_isAgent)
 
@@ -423,22 +385,27 @@ class AddCreatorDialog(QDialog):
 
     def submit_data(self):
         data = self.make_tasks()
-        isAgent = self.combo_isAgent.currentText()
-        isAgent = {'True': True, 'False': False}.get(isAgent)
-
         data.update({
             'id': int(self.label_id.text()),
             'team': self.lineedit_team.text(),
-            'userId': self.label_userId.text(),
+            'userId': int(self.label_userId.text()),
             'phone': self.lineedit_phone.text(),
             'invitationCode': self.label_invitationCode.text(),
-            'isAgent': isAgent
+            'isAgent': int(self.combo_isAgent.currentText())
         })
 
         Globals._WS.database_operation_signal.emit('insert', {
             'table_name': 'auto_creator',
             'data': data
         }, None)
+
+        team_data = {key: data[key] for key in ['userId', 'team']}
+        Globals._WS.database_operation_signal.emit('upsert', {
+            'table_name': 'users_america',
+            'data': team_data,
+            'unique_columns': ['userId'],
+        }, None)
+        Globals._WS.users_america_update_row_signal.emit(team_data)
 
         self.parent().add_row(data)
 
@@ -521,13 +488,17 @@ class AutoCreatorWorker(QRunnable):
 
         self.columns = []
         self.format_timestamp_str = '%Y-%m-%d %H:%M:%S'
+        self.counter = itertools.count()
+        self.in_processing = set()
         self.is_running = False
+        self.queue_database = Queue()
+        self.queue_tasks = PriorityQueue()
         self.setAutoDelete(False)
         self.tz = pytz.timezone('Asia/Shanghai')
 
         self.user = 'AutoCreatorWorker'
 
-    async def add_task(self, data):
+    def add_task(self, data):
         tasks_str = data.get('remainTasks', '')
         if not tasks_str:
             Globals._Log.error(self.user, f'add_task: No task found: {data}')
@@ -539,125 +510,32 @@ class AutoCreatorWorker(QRunnable):
                 Globals._Log.error(self.user, f'add_task: Task format is incorrect: {data}')
                 return
             now = time.time()
-            weight = datetime.strptime(tasks[0][1], self.format_timestamp_str).timestamp()
+            weight = datetime.strptime(tasks[0][0], self.format_timestamp_str).timestamp()
             interval = now - weight
             if interval < -10:
                 return
             if interval > 30:
                 Globals._Log.warning(self.user, f'add_task: Delay task: {tasks[0]}')
                 for task in tasks:
-                    task_time = datetime.strptime(task[1], '%Y-%m-%d %H:%M:%S').replace(tzinfo=pytz.timezone('Asia/Shanghai'))
+                    task_time = datetime.strptime(task[0], '%Y-%m-%d %H:%M:%S').replace(tzinfo=self.tz)
                     new_time = task_time + timedelta(seconds=interval)
-                    task[1] = new_time.strftime('%Y-%m-%d %H:%M:%S')
+                    task[0] = new_time.strftime('%Y-%m-%d %H:%M:%S')
             data['remainTasks'] = tasks
-            await self.safe_put(weight, data)
+            self.queue_tasks.put(((weight, next(self.counter)), data))
         
         except Exception as e:
             Globals._Log.error(self.user, f'add_task: {e}')
             return
-        
-    async def async_run(self):
-        self.is_running = True
-        if not self.columns:
-            print('initialize_columns')
-            await self.initialize_columns()
-        while self.is_running and Globals.is_app_running:
-            if self.queue_tasks.empty():
-                print('task empty, get tasks')
-                await self.get_tasks()
-            if self.queue_tasks.empty():
-                print('task empty, wait 5')
-                await asyncio.sleep(5)
-                continue
-            now = time.time()
-            weight, task = await self.queue_tasks.get()
-            interval = weight - now
-            if interval > 0:
-                print(f'wait {interval} to start: {task["remainTasks"][0]}')
-                await asyncio.sleep(interval + 1)
-            await self.processing(task)
-        self.is_running = False
 
-    async def consume_vip(self, phone, password, token):
-        url = f'/sqx_fast/app/order/insertVipOrders'
-        params = {'vipDetailsId': 1, 'time': int(time.time() * 1000)}
-        userinfo = {'phone': phone, 'password': password, 'token': token}
-
-        res = await Globals.request_with_user('get', url, userinfo, params=params)
-        orderId = res.get('data', {}).get('ordersId')
-        if orderId is None:
-            Globals._Log.error(self.user, 'consume_vip: Failed to create order. No orderId returned.')
-            return False
-
-        if not await Globals.request_with_user(
-            'post',
-            '/sqx_fast/app/order/payOrders',
-            userinfo,
-            data=f'orderId={orderId}',
-            headers={'Content-Type': 'application/x-www-form-urlencoded'}
-        ):
-            return False
-        return True
-
-    async def create_user_worker(self, phone, invitationCode):
-
-        def _generate_password(length=8):
-            characters = string.ascii_letters + string.digits
-            password = ''.join(random.choice(characters) for _ in range(length))
-            return password
-
-        password = _generate_password()
-
-        if isinstance(invitationCode, int):
-            return
-        else:
-            url = f'/sqx_fast/app/Login/registerCode?password={password}&phone={phone}&msg=9999&inviterCode={invitationCode}&inviterType=0&inviterUrl=&platform=h5'
-        headers = {'Content-Type': 'application/x-www-form-urlencoded'}
-
-        Globals._Log.info(self.user, f'Attempting to create user with phone: {phone}')
-
-        async def register_user():
-            res = requests.post(f'{Globals._BASE_URL_AMERICA}{url}', headers=headers)
-            res.raise_for_status()
-            data = res.json()
-            if data.get('msg') != 'success':
-                raise Exception(f'create_user_worker: error msg {data["msg"]}')
-            user = data.get('user')
-            user['team'] = 'admin'
-            user['iscreator'] = True
-            user['realpassword'] = password
-            user['token'] = data.get('token')
-            return user
-    
-        try:
-            user = await Globals.retry(register_user)
-        except Exception as e:
-            Globals._Log.error(self.user, f'create_user_worker: {e}')
-            return '', '', ''
-        
-        if not user:
-            return '', '', ''
-
-        Globals._WS.database_operation_signal.emit('insert', {
-            'table_name': 'users_america',
-            'data': user
-        }, None)
-
-        Globals._WS.users_america_update_row_signal.emit(user)
-
-        Globals._Log.info(self.user, f'User {phone} was created successfully')
-
-        return user['userId'], password, user['token']
-
-    async def reset_tasks(self, data):
+    def reset_tasks(self, data):
         Globals._WS.database_operation_signal.emit('upsert',{
             'table_name': 'auto_creator',
             'data': data,
             'unique_columns': ['id']
         }, None)
-        Globals._WS.users_america_update_row_signal.emit(data)
+        Globals._WS.autoCreatorTab_update_row_signal.emit(data)
 
-    async def get_tasks(self):
+    def get_tasks(self):
         Globals._WS.database_operation_signal.emit('read', {
             'table_name': 'auto_creator',
             'condition': 'isCompleted IS NOT TRUE'
@@ -668,198 +546,101 @@ class AutoCreatorWorker(QRunnable):
             data_dict = {}
             for idx, col in enumerate(self.columns):
                 data_dict[col] = data[idx]
-            await self.add_task(data_dict)
+            if data_dict['userId'] not in self.in_processing:
+                self.add_task(data_dict)
 
-    async def initialize_columns(self):
+    def initialize_columns(self):
         Globals._WS.database_operation_signal.emit('get_table_fields', {'table_name': 'auto_creator'}, self.queue_database)
         self.columns = self.queue_database.get()
     
-    async def make_consume_task(self, phone, password, token):
+    def make_consume_task(self, userId):
         delay = random.choices([random.randint(60, 300), random.randint(300, 900), random.randint(900, 1800)], [0.6, 0.3, 0.1], k=1)[0] + int(time.time())
-        return ['consume', datetime.fromtimestamp(delay, self.tz).strftime('%Y-%m-%d %H:%M:%S'), phone, password, token]
+        return [datetime.fromtimestamp(delay, self.tz).strftime('%Y-%m-%d %H:%M:%S'), 'consume', userId]
     
-    async def make_recharge_task(self, phone, userId, password, token):
+    def make_recharge_task(self, userId):
         delay = int(time.time()) + random.randint(180, 900)
-        return ['recharge', datetime.fromtimestamp(delay, self.tz).strftime('%Y-%m-%d %H:%M:%S'), phone, userId, password, token]
+        return [datetime.fromtimestamp(delay, self.tz).strftime('%Y-%m-%d %H:%M:%S'), 'recharge', userId]
     
-    async def recharge(self, userId):
-        if not await Globals.request_with_admin('get', f'/sqx_fast/user/{userId}'):
+    def recharge(self, userId):
+        if not Globals._requests_admin.request('get', f'/sqx_fast/user/{userId}'):
             return False
-        if not await Globals.request_with_admin('get', f'/sqx_fast/moneyDetails/selectUserMoney?userId={userId}'):
+        if not Globals._requests_admin.request('get', f'/sqx_fast/moneyDetails/selectUserMoney?userId={userId}'):
             return False
-        if not await Globals.request_with_admin('post', f'/sqx_fast/user/addCannotMoney/{userId}/4'):
+        if not Globals._requests_admin.request('post', f'/sqx_fast/user/addCannotMoney/{userId}/4'):
             return False
-        if not await Globals.request_with_admin('get', f'/sqx_fast/user/{userId}'):
+        if not Globals._requests_admin.request('get', f'/sqx_fast/user/{userId}'):
             return False
-        if not await Globals.request_with_admin('get', f'/sqx_fast/moneyDetails/selectUserMoney?userId={userId}'):
+        if not Globals._requests_admin.request('get', f'/sqx_fast/moneyDetails/selectUserMoney?userId={userId}'):
             return False
         return True
 
-    async def processing(self, data):
-        tasks = data['remainTasks']
-        method, _, phone = tasks[0][:3]
-        if method == 'create':
-            await self.create_user_worker(phone, data['invitationCode'])
-        elif method == 'super_create':
-            userId, password, token = await self.create_user_worker(phone, data['invitationCode'])
-            if not userId:
+    def processing(self, data):
+        try:
+            tasks = data['remainTasks']
+            print(f'processing tasks: {tasks[0]}')
+            _, method, param = tasks[0][:3]
+            if method == 'create':
+                UserRequests.create_user(data['invitationCode'], param)
+            elif method == 'super_create':
+                userId = UserRequests.create_user(data['invitationCode'], param)
+                tasks.append(self.make_recharge_task(userId))
+            elif method == 'recharge':
+                if not self.recharge(param):
+                    return
+                Globals._Log.info(self.user, f'processing: {param} recharge successfully')
+                tasks.append(self.make_consume_task(param))
+            elif method == 'consume':
+                UserRequests(param).consume_vip()
+            else:
+                Globals._Log.error(self.user, f'Invalid method: {method}')
                 return
-            tasks.append(await self.make_recharge_task(phone, userId, password, token))
-        elif method == 'recharge':
-            userId, password, token = tasks[0][3:6]
-            if not await self.recharge(userId):
-                Globals._Log.error(self.user, f'processing: {phone} recharge failed')
-                return
-            Globals._Log.info(self.user, f'processing: {phone} recharge successfully')
-            tasks.append(await self.make_consume_task(phone, password, token))
-        elif method == 'consume':
-            password, token = tasks[0][3:5]
-            if not await self.consume_vip(phone, password, token):
-                Globals._Log.error(self.user, f'processing: {phone} consume failed')
-                return
-            Globals._Log.info(self.user, f'processing: {phone} consume successfully')
-        else:
-            Globals._Log.error(self.user, f'Invalid method: {method}')
-            return
-        
-        del tasks[0]
-        if not tasks:
-            data.update({
-                'remainTasks': '',
-                'isCompleted': True,
-                'updateTime': datetime.fromtimestamp(time.time(), self.tz).strftime('%Y-%m-%d %H:%M:%S')
-            })
-        else:
-            remainTasks = sorted(tasks, key=lambda x: x[1])
-            data.update({
-                'remainTasks': str(remainTasks),
-                'updateTime': datetime.fromtimestamp(time.time(), self.tz).strftime('%Y-%m-%d %H:%M:%S')
-            })
-        await self.reset_tasks(data)
+            
+            del tasks[0]
+            if not tasks:
+                data.update({
+                    'remainTasks': '',
+                    'isCompleted': 1,
+                    'updateTime': datetime.fromtimestamp(time.time(), self.tz).strftime('%Y-%m-%d %H:%M:%S')
+                })
+            else:
+                remainTasks = sorted(tasks, key=lambda x: x[0])
+                data.update({
+                    'remainTasks': str(remainTasks),
+                    'updateTime': datetime.fromtimestamp(time.time(), self.tz).strftime('%Y-%m-%d %H:%M:%S')
+                })
+            self.reset_tasks(data)
 
-    async def safe_put(self, weight, item):
-        attempt = 100
-        while attempt:
-            try:
-                await self.queue_tasks.put((weight, item))
-                break
-            except:
-                weight += 0.001
-                attempt -= 1
+        except Exception as e:
+            Globals._Log.error(self.user, f'processing: {e}')
+        
+        finally:
+            self.in_processing.discard(data['userId'])
 
     def run(self):
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-        self.queue_database = Queue()
-        self.queue_tasks = asyncio.PriorityQueue()
-
-        loop.run_until_complete(self.async_run())
-        loop.close()
+        self.is_running = True
+        if not self.columns:
+            self.initialize_columns()
+        while self.is_running and Globals.is_app_running:
+            if self.queue_tasks.empty():
+                self.get_tasks()
+            if self.queue_tasks.empty():
+                print('task empty, wait 5')
+                time.sleep(5)
+                continue
+            now = time.time()
+            ((weight, _), data) = self.queue_tasks.get()
+            interval = weight - now
+            if interval > 0:
+                print(f'wait {interval} to start: {data["remainTasks"][0]}')
+                time.sleep(interval + 1)
+            print(f'will inner: {data}')
+            self.in_processing.add(data['userId'])
+            Globals.run_task(self.processing, data=data)
+        self.is_running = False
 
     def start_task(self):
         if not self.is_running:
-            Globals.thread_pool.start(self)
+            Globals.thread_pool_global.start(self)
 
     def stop_task(self):
         self.is_running = False
-
-class EmailGenerator(object):
-    def __init__(self):
-        self.fake = Faker('zh_TW')
-        self.digits_options = [
-            '',
-            random.choice(string.digits),
-            ''.join(random.choices(string.digits, k=2)),
-            ''.join(random.choices(string.digits, k=3)),
-            ''.join(random.choices(string.digits, k=4))
-        ]
-        self.digits_weights = [0.1, 0.2, 0.3, 0.3, 0.1]
-        self.weights = {
-            '@gmail.com': 0.45,
-            '@yahoo.com.tw': 0.2,
-            '@seed.net.tw': 0.05,
-            '@hotmail.com': 0.05,
-            '@outlook.com': 0.05,
-            '@msn.com': 0.01,
-            '@aol.com': 0.01,
-            '@ask.com': 0.01,
-            '@live.com': 0.02,
-            '@livemail.tw': 0.02,
-            '@hotmail.com.tw': 0.01,
-            '@ms33.url.com.tw': 0.01,
-            '@topmarkeplg.com.tw': 0.01,
-            '@pchome.com.tw': 0.1,
-            '@hinet.net': 0.15,
-            '@so-net.net.tw': 0.02,
-            '@tpts5.seed.net.tw': 0.01,
-            '@umail.hinet.net': 0.05,
-            '@mail2000.com.tw': 0.03,
-            '@ebizprise.com': 0.01
-        }
-
-    def get_pinyin(self, name):
-        return ''.join([x[0] for x in pinyin(name, style=Style.NORMAL)])
-
-    def split_name(self, name):
-        return [self.get_pinyin(char) for char in name]
-
-    def append_random_digits(self, base):
-        return base + ''.join(random.choices(self.digits_options, self.digits_weights, k=1))
-
-    def generate_username(self):
-        first_name = self.fake.first_name()
-        last_name = self.fake.last_name()
-        fn_pinyin = self.split_name(first_name)
-        ln_pinyin = self.split_name(last_name)
-
-        strategies = [
-            lambda fn, ln: self.append_random_digits(ln[0] + ''.join(fn)),
-            lambda fn, ln: self.append_random_digits(''.join(ln) + ''.join(f[0] for f in fn)),
-            lambda fn, ln: self.append_random_digits(''.join(fn) + ''.join(ln)),
-            lambda fn, ln: self.append_random_digits(random.choice(fn) + ''.join(ln)),
-            lambda fn, ln: self.append_random_digits(''.join(ln) + random.choice([f[0] for f in fn])),
-            lambda fn, ln: self.append_random_digits(''.join(random.sample(fn, len(fn))) + ''.join(ln)),
-            lambda fn, ln: self.append_random_digits(''.join(ln) + ''.join(random.choices(string.ascii_lowercase, k=3))),
-            lambda fn, ln: self.append_random_digits(''.join(ln) + ''.join(random.choices(string.ascii_lowercase + string.digits, k=random.randint(1, 3))) + random.choice(fn)),
-            lambda fn, ln: self.append_random_digits(''.join(ln) + random.choice(fn) + ''.join(random.choices(string.ascii_lowercase + string.digits, k=random.randint(1, 3))))
-        ]
-
-        username = ''
-        while len(username) < 6:
-            choice = random.choices(strategies, weights=[0.1] * 9, k=1)[0]
-            username += choice(fn_pinyin, ln_pinyin).lower()
-
-        min_length = 8
-        if len(username) < min_length:
-            username += ''.join(random.choices(string.digits, k=min_length - len(username)))
-
-        if not username[0].isalpha():
-            username = random.choice(string.ascii_lowercase) + username[1:]
-
-        return username
-
-    def get_email(self):
-        username = self.generate_username()
-        domain = random.choices(list(self.weights.keys()), weights=list(self.weights.values()), k=1)[0]
-        return f"{username}{domain}"
-    
-class PhoneGenerator(object):
-    def __init__(self):
-        self.length = 10
-        self.prefix = [
-            "0939", "0958", "0980", "0916", "0930", "0988", "0987", "0975", "0926", "0920", 
-            "0972", "0911", "0917", "0936", "0989", "0931", "0937", "0981", "0983", "0905", 
-            "0903", "0909", "0910", "0912", "0913", "0914", "0915", "0918", "0919", "0921", 
-            "0922", "0923", "0925", "0927", "0928", "0929", "0932", "0933", "0934", "0935", 
-            "0938", "0940", "0941", "0943", "0945", "0948", "0952", "0953", "0955", "0956", 
-            "0957", "0960", "0961", "0963", "0965", "0966", "0968", "0970", "0971", "0973", 
-            "0974", "0976", "0977", "0978", "0979", "0982", "0984", "0985", "0986", "0990", 
-            "0991", "0992", "0993", "0995", "0996", "0998"
-        ]
-
-    def get_number(self):
-        prefix = random.choice(self.prefix)
-        remaining_length = self.length - len(prefix)
-        remaining_digits = ''.join(random.choices('0123456789', k=remaining_length))
-        return prefix + remaining_digits
