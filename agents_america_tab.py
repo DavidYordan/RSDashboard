@@ -113,6 +113,29 @@ class AgentsAmericaTab(QWidget):
 
         Globals._Log.info(self.user, 'Reload completed')
 
+    def set_inviter(self):
+        index = self.table.currentIndex()
+        if not index.isValid():
+            return
+    
+        row = index.row()
+        userName = self.table.item(row, self.columns_display.index('userName')).text()
+        current_inviter = self.table.item(row, self.columns_display.index('inviterCode')).text()
+
+        new_inviter, ok = QInputDialog.getText(self, f'Set Inviter For {userName}', 'Enter new inviter:', QLineEdit.EchoMode.Normal, current_inviter)
+        
+        if ok:
+            self.table.item(row, self.columns_display.index('inviterCode')).setText(new_inviter)
+            Globals._WS.database_operation_signal.emit('upsert', {
+                'table_name': 'agents_america',
+                'data': {
+                    'userId': self.table.item(row, self.columns_display.index('userId')).text(),
+                    'inviterCode': new_inviter
+                },
+                'unique_columns': ['userId']
+            }, None)
+            Globals._Log.info(self.user, f'Inviter updated for user at row {row} to {new_inviter}')
+
     def set_team(self):
         index = self.table.currentIndex()
         if not index.isValid():
@@ -176,6 +199,9 @@ class AgentsAmericaTab(QWidget):
 
         action_set_team = menu.addAction('Set Team')
         action_set_team.triggered.connect(self.set_team)
+
+        action_set_team = menu.addAction('Set Inviter')
+        action_set_team.triggered.connect(self.set_inviter)
 
         # action_copy_tk_link = menu.addAction('Copy invitation Link')
         # action_copy_tk_link.triggered.connect(lambda: QApplication.clipboard().setText(invitation_link))
