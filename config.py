@@ -1,6 +1,7 @@
 import json
 
 from globals import Globals, ProgressDialog
+from graph import FamilyTree
 from operate_sqlite import OperateSqlite
 
 def config_init(parent):
@@ -14,6 +15,7 @@ def config_init(parent):
     Globals._CLIENT_UUID = config['CLIENT_UUID']
     Globals._ProgressDialog = ProgressDialog(parent)
     Globals._SQL = OperateSqlite(config['DB_PATH'])
+    Globals._FamilyTree = FamilyTree(parent)
     Globals._TELEGRAM_BOT_TOKEN = config['TELEGRAM_BOT_TOKEN']
     Globals._TELEGRAM_CHATID = config['TELEGRAM_CHATID']
     Globals._TO_CAPTCHA_KEY = config['TO_CAPTCHA_KEY']

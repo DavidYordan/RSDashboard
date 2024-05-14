@@ -253,7 +253,12 @@ class DBSchema(object):
                 "agentId": "INTEGER",
                 "agentRate": "TEXT",
                 "agentType": "INTEGER",
-                "agentWithdrawCash": "TEXT"
+                "agentWithdrawCash": "TEXT",
+                "inviterCode": "TEXT",
+                "isdeleted": "BOOLEAN",
+                "iscreator": "BOOLEAN",
+                "realpassword": "TEXT",
+                "token": "TEXT"
             },
             "primary": "(userId)"
         },
@@ -284,6 +289,22 @@ class DBSchema(object):
         #     },
         #     "primary": "(name)"
         # },
+        "recharge": {
+            "columns": {
+                "classify": "INTEGER",
+                "money": "TEXT",
+                "orderId": "INTEGER",
+                "createTime": "TEXT",
+                "payTime": "TEXT",
+                "phone": "TEXT",
+                "payWay": "INTEGER",
+                "id": "INTEGER",
+                "state": "INTEGER",
+                "userName": "TEXT",
+                "userId": "INTEGER"
+            },
+            "primary": "(id)"
+        },
         "products_america": {
             "columns": {
                 "courseId": "INTEGER",
@@ -393,5 +414,32 @@ class DBSchema(object):
                 "token": "TEXT"
             },
             "primary": "(userId)"
+        },
+        "withdraw": {
+            "columns": {
+                "id": "INTEGER",
+                "createAt": "TEXT",
+                "outAt": "TEXT",
+                "money": "TEXT",
+                "isOut": "TEXT",
+                "relationId": "TEXT",
+                "userId": "INTEGER",
+                "zhifubao": "TEXT",
+                "zhifubaoName": "TEXT",
+                "orderNumber": "INTEGER",
+                "state": "INTEGER",
+                "type": "INTEGER",
+                "refund": "TEXT",
+                "rate": "TEXT",
+                "recipient": "TEXT",
+                "bankNumber": "TEXT",
+                "bankName": "TEXT",
+                "bankAddress": "TEXT",
+                "bankCode": "TEXT",
+                "userName": "TEXT",
+                "startTime": "TEXT",
+                "endTime": "TEXT"
+            },
+            "primary": "(id)"
         }
     }

@@ -1,3 +1,6 @@
+import datetime
+
+from collections import defaultdict
 from PyQt6.QtCore import(
     pyqtSlot,
     Qt
@@ -7,8 +10,10 @@ from PyQt6.QtWidgets import (
     QApplication,
     QHBoxLayout,
     QHeaderView,
+    QLineEdit,
     QInputDialog,
     QMenu,
+    QMessageBox,
     QPushButton,
     QTableWidgetItem,
     QVBoxLayout,
@@ -30,8 +35,14 @@ class UsersAmericaTab(QWidget):
         Globals._WS.database_operation_signal.emit('get_table_fields', {'table_name': 'users_america'}, q)
         self.columns = q.get()
 
+        Globals._WS.database_operation_signal.emit('get_table_fields', {'table_name': 'withdraw'}, q)
+        self.columns_withdraw = q.get()
+
+        Globals._WS.database_operation_signal.emit('get_table_fields', {'table_name': 'recharge'}, q)
+        self.columns_recharge = q.get()
+
         self.columns_display = [
-            'team', 'userId', 'phone', 'iscreator', 'income', 'withdraw', 'recharge', 'jifen', 'money', 'invitations', 'platform', 'inviterCode', 'invitationCode'
+            'team', 'userId', 'phone', 'iscreator', 'income', 'withdraw', 'recharge', 'jifen', 'money', 'invitations', 'invitationType', 'platform', 'inviterCode', 'invitationCode'
         ]
 
         Globals._WS.users_america_update_row_signal.connect(self.update_row)
@@ -46,6 +57,10 @@ class UsersAmericaTab(QWidget):
     def add_creator(self):
         current_index = self.table.currentIndex()
         row = current_index.row()
+        invitationType = self.table.item(row, self.columns_display.index('invitationType')).text()
+        if not invitationType:
+            Globals._Log.error(self.user, 'Distribution has not been activated.')
+            return
         data = {
             'team': self.table.item(row, self.columns_display.index('team')).text(),
             'userId': self.table.item(row, self.columns_display.index('userId')).text(),
@@ -120,27 +135,74 @@ class UsersAmericaTab(QWidget):
             'table_name': 'users_america',
             'condition': 'isdeleted IS NOT TRUE'
         }, q)
-
         datas = q.get()
+
+        Globals._WS.database_operation_signal.emit('read', {
+            'table_name': 'withdraw',
+            'condition': 'state=1'
+        }, q)
+        withdraw_dict = defaultdict(float)
+        col_userId = self.columns_withdraw.index('userId')
+        col_money = self.columns_withdraw.index('money')
+        for withdraw in q.get():
+            withdraw_dict[withdraw[col_userId]] += float(withdraw[col_money])
+
+        Globals._WS.database_operation_signal.emit('read', {
+            'table_name': 'recharge',
+            'condition': 'state=1'
+        }, q)
+        recharge_dict = defaultdict(float)
+        for recharge in q.get():
+            recharge_dict[recharge[self.columns_recharge.index('userId')]] += float(recharge[self.columns_recharge.index('money')])
+
         for data in datas:
-            row_data = {}
-            for idx, col in enumerate(self.columns):
-                row_data[col] = data[idx]
+            row_data = {col: data[idx] for idx, col in enumerate(self.columns)}
+            userId = row_data['userId']
+            if userId in withdraw_dict:
+                row_data['withdraw'] = withdraw_dict[userId]
+            if userId in recharge_dict:
+                row_data['recharge'] = recharge_dict[userId]
             self.add_row(row_data)
 
         Globals._Log.info(self.user, 'Reload completed')
+
+    def set_team(self):
+        index = self.table.currentIndex()
+        if not index.isValid():
+            return
+    
+        row = index.row()
+        phone = self.table.item(row, self.columns_display.index('phone')).text()
+        current_team = self.table.item(row, self.columns_display.index('team')).text()
+
+        new_team, ok = QInputDialog.getText(self, f'Set Team For {phone}', 'Enter new team:', QLineEdit.EchoMode.Normal, current_team)
+        
+        if ok:
+            self.table.item(row, self.columns_display.index('team')).setText(new_team)
+            Globals._WS.database_operation_signal.emit('upsert', {
+                'table_name': 'users_america',
+                'data': {
+                    'userId': self.table.item(row, self.columns_display.index('userId')).text(),
+                    'team': new_team
+                },
+                'unique_columns': ['userId']
+            }, None)
+            Globals._Log.info(self.user, f'Team updated for user at row {row} to {new_team}')
 
     def setup_ui(self):
         layout = QVBoxLayout(self)
 
         top_layout = QHBoxLayout()
         layout.addLayout(top_layout)
-        button_update_all = QPushButton('Update All Users')
-        button_update_all.clicked.connect(self.update_users)
-        top_layout.addWidget(button_update_all)
+        self.button_update_all = QPushButton('Update All Users')
+        self.button_update_all.clicked.connect(self.update_users)
+        top_layout.addWidget(self.button_update_all)
         button_update_one = QPushButton('Update User')
         button_update_one.clicked.connect(self.update_user)
         top_layout.addWidget(button_update_one)
+        self.button_update_withdraw = QPushButton('Update Withdraw')
+        self.button_update_withdraw.clicked.connect(self.update_withdraw_and_recharge)
+        top_layout.addWidget(self.button_update_withdraw)
         self.button_create_user = QPushButton('Create User')
         self.button_create_user.clicked.connect(self.create_user)
         top_layout.addWidget(self.button_create_user)
@@ -173,6 +235,9 @@ class UsersAmericaTab(QWidget):
 
         action_add_creator = menu.addAction('Add Creator')
         action_add_creator.triggered.connect(self.add_creator)
+
+        action_set_team = menu.addAction('Set Team')
+        action_set_team.triggered.connect(self.set_team)
 
         action_copy_tk_link = menu.addAction('Copy invitation Link')
         action_copy_tk_link.triggered.connect(lambda: QApplication.clipboard().setText(invitation_link))
@@ -250,6 +315,7 @@ class UsersAmericaTab(QWidget):
             Globals._Log.error(self.user, f'Failed to update user data of {phone}: {e}')
 
     def update_users(self):
+        self.button_update_all.setEnabled(False)
         Globals.run_task(self.update_users_worker)
 
     def update_users_worker(self):
@@ -276,5 +342,72 @@ class UsersAmericaTab(QWidget):
             if page > totalPage:
                 Globals._Log.info(self.user, 'Users update process completed successfully.')
                 break
-        self.reload()
+        
         Globals._WS.progress_hide_signal.emit(0)
+        self.button_update_all.setEnabled(True)
+
+    def update_withdraw_and_recharge(self):
+        self.button_update_withdraw.setEnabled(False)
+        Globals.run_task(self.update_withdraw_and_recharge_worker)
+
+    def update_withdraw_and_recharge_worker(self):
+        Globals._Log.info(self.user, 'Starting withdraw and recharge update process.')
+        today = datetime.date.today().strftime('%Y-%m-%d')
+        page = 1
+        totalPage = 0
+        while True:
+            Globals._Log.info(self.user, f'Fetching withdraw for page {page}/{totalPage}')
+            params = {
+                'page': page,
+                'limit': 500,
+                'recipient': '',
+                'bankNumber': '',
+                'state': '',
+                'type': '',
+                'startTime': '2024-01-01',
+                'endTime': today
+            }
+            res = Globals._requests_admin.request('get', f'/sqx_fast/cash/selectPayDetails', params=params)
+            datas = res.get('data', {})
+            totalPage = datas.get('pages', 0)
+            
+            data_list = datas.get('records', [])
+            Globals._WS.database_operation_signal.emit('bulk_upsert', {
+                'table_name': 'withdraw',
+                'datas': data_list,
+                'unique_columns': ['id']
+            }, None)
+
+            page += 1
+            if page > totalPage:
+                Globals._Log.info(self.user, 'Withdraw update process completed successfully.')
+                break
+
+        page = 1
+        totalPage = 0
+        while True:
+            Globals._Log.info(self.user, f'Fetching recharge for page {page}/{totalPage}')
+            params = {
+                'page': page,
+                'limit': 500,
+                'state': '',
+                'startTime': '2024-01-01',
+                'endTime': today
+            }
+            res = Globals._requests_admin.request('get', f'/sqx_fast/cash/selectUserRecharge', params=params)
+            datas = res.get('data', {})
+            totalPage = datas.get('pages', 0)
+            
+            data_list = datas.get('list', [])
+            Globals._WS.database_operation_signal.emit('bulk_upsert', {
+                'table_name': 'recharge',
+                'datas': data_list,
+                'unique_columns': ['id']
+            }, None)
+
+            page += 1
+            if page > totalPage:
+                Globals._Log.info(self.user, 'Recharge update process completed successfully.')
+                break
+        
+        self.button_update_withdraw.setEnabled(True)

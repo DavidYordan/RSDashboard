@@ -1,7 +1,7 @@
+
 import os
 import sys
 from PyQt6.QtCore import (
-    pyqtSlot,
     Qt
 )
 from PyQt6.QtGui import (
@@ -28,6 +28,7 @@ from PyQt6.QtWidgets import (
 if __name__ == '__main__':
     app = QApplication(sys.argv)
 
+from agents_america_tab import AgentsAmericaTab
 from auto_creator_tab import AutoCreatorTab
 from concurrent_requests import AdminRequests
 from globals import Globals
@@ -159,6 +160,11 @@ class RSDashboard(QMainWindow):
         self.action_autoCreatorWorker_stop.triggered.connect(self.autoCreatorWorker_stop)
         menu_autoCreatorWorker.addActions([self.action_autoCreatorWorker_run, self.action_autoCreatorWorker_stop])
 
+        menu_graph = menubar.addMenu('Graph')
+        action_family_tree = QAction('FamilyTree', self)
+        action_family_tree.triggered.connect(lambda: Globals._FamilyTree.show())
+        menu_graph.addActions([action_family_tree])
+
     def create_main_panel(self):
         central_widget = QWidget(self)
         self.setCentralWidget(central_widget)
@@ -192,6 +198,11 @@ class RSDashboard(QMainWindow):
             self.tab_left
         )
         self.tab_left.addTab(self.users_america_tab, 'Users')
+
+        self.agents_america_tab = AgentsAmericaTab(
+            self.tab_left
+        )
+        self.tab_left.addTab(self.agents_america_tab, 'Agents')
 
         self.auto_creator_tab = AutoCreatorTab(
             self.tab_left

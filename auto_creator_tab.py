@@ -1,8 +1,6 @@
 import itertools
 import pytz
 import random
-import requests
-import string
 import time
 
 from ast import literal_eval
@@ -34,7 +32,7 @@ from PyQt6.QtWidgets import (
 )
 from queue import Queue, PriorityQueue
 
-from concurrent_requests import AdminRequests, UserRequests
+from concurrent_requests import UserRequests
 from globals import Globals, TableWidget
 
 class AutoCreatorTab(QWidget):

@@ -1,10 +1,6 @@
-import asyncio
-import requests
-from playwright.async_api import async_playwright
 from PyQt6.QtCore import (
     pyqtSignal,
     pyqtSlot,
-    QMutex,
     QObject,
     QRunnable,
     Qt,
@@ -22,6 +18,7 @@ from PyQt6.QtWidgets import (
 from dylogging import Logging
 
 class WorkerSignals(QObject):
+    agents_america_update_row_signal = pyqtSignal(dict)
     autoCreatorTab_add_creator_signal = pyqtSignal(dict)
     autoCreatorTab_update_row_signal = pyqtSignal(dict)
     autoCreatorTab_update_task_signal = pyqtSignal(str, str)
@@ -100,13 +97,12 @@ class Globals(QObject):
     _Bot = None
     _CLIENT_ID = ''
     _CLIENT_UUID = ''
+    _FamilyTree = None
     _log_textedit = QTextEdit()
     _log_label = QLabel()
     _Log = Logging(_log_textedit, _log_label)
-    _MUTEX_TOKEN = QMutex()
     _ProgressDialog = None
     _requests_admin = None
-    _requests_user = None
     _SQL = None
     _TELEGRAM_BOT_TOKEN = ''
     _TELEGRAM_CHATID = ''
