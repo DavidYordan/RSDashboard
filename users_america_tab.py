@@ -1,4 +1,5 @@
 import datetime
+import pandas as pd
 
 from collections import defaultdict
 from PyQt6.QtCore import(
@@ -13,7 +14,6 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QInputDialog,
     QMenu,
-    QMessageBox,
     QPushButton,
     QTableWidgetItem,
     QVBoxLayout,
@@ -137,31 +137,31 @@ class UsersAmericaTab(QWidget):
         }, q)
         datas = q.get()
 
-        Globals._WS.database_operation_signal.emit('read', {
-            'table_name': 'withdraw',
-            'condition': 'state=1'
-        }, q)
-        withdraw_dict = defaultdict(float)
-        col_userId = self.columns_withdraw.index('userId')
-        col_money = self.columns_withdraw.index('money')
-        for withdraw in q.get():
-            withdraw_dict[withdraw[col_userId]] += float(withdraw[col_money])
+        # Globals._WS.database_operation_signal.emit('read', {
+        #     'table_name': 'withdraw',
+        #     'condition': 'state=1'
+        # }, q)
+        # withdraw_dict = defaultdict(float)
+        # col_userId = self.columns_withdraw.index('userId')
+        # col_money = self.columns_withdraw.index('money')
+        # for withdraw in q.get():
+        #     withdraw_dict[withdraw[col_userId]] += float(withdraw[col_money])
 
-        Globals._WS.database_operation_signal.emit('read', {
-            'table_name': 'recharge',
-            'condition': 'state=1'
-        }, q)
-        recharge_dict = defaultdict(float)
-        for recharge in q.get():
-            recharge_dict[recharge[self.columns_recharge.index('userId')]] += float(recharge[self.columns_recharge.index('money')])
+        # Globals._WS.database_operation_signal.emit('read', {
+        #     'table_name': 'recharge',
+        #     'condition': 'state=1'
+        # }, q)
+        # recharge_dict = defaultdict(float)
+        # for recharge in q.get():
+        #     recharge_dict[recharge[self.columns_recharge.index('userId')]] += float(recharge[self.columns_recharge.index('money')])
 
         for data in datas:
             row_data = {col: data[idx] for idx, col in enumerate(self.columns)}
-            userId = row_data['userId']
-            if userId in withdraw_dict:
-                row_data['withdraw'] = withdraw_dict[userId]
-            if userId in recharge_dict:
-                row_data['recharge'] = recharge_dict[userId]
+            # userId = row_data['userId']
+            # if userId in withdraw_dict:
+            #     row_data['withdraw'] = withdraw_dict[userId]
+            # if userId in recharge_dict:
+            #     row_data['recharge'] = recharge_dict[userId]
             self.add_row(row_data)
 
         Globals._Log.info(self.user, 'Reload completed')
@@ -200,9 +200,6 @@ class UsersAmericaTab(QWidget):
         button_update_one = QPushButton('Update User')
         button_update_one.clicked.connect(self.update_user)
         top_layout.addWidget(button_update_one)
-        self.button_update_withdraw = QPushButton('Update Withdraw')
-        self.button_update_withdraw.clicked.connect(self.update_withdraw_and_recharge)
-        top_layout.addWidget(self.button_update_withdraw)
         self.button_create_user = QPushButton('Create User')
         self.button_create_user.clicked.connect(self.create_user)
         top_layout.addWidget(self.button_create_user)
@@ -238,6 +235,9 @@ class UsersAmericaTab(QWidget):
 
         action_set_team = menu.addAction('Set Team')
         action_set_team.triggered.connect(self.set_team)
+
+        action_show_familyTree = menu.addAction('Show FamilyTree')
+        action_show_familyTree.triggered.connect(lambda: Globals._FamilyTree.show(invitation_code))
 
         action_copy_tk_link = menu.addAction('Copy invitation Link')
         action_copy_tk_link.triggered.connect(lambda: QApplication.clipboard().setText(invitation_link))
@@ -290,9 +290,9 @@ class UsersAmericaTab(QWidget):
 
             response = Globals._requests_admin.request('get', f'/sqx_fast/user/{userId}')
             user_info = response['data']['userEntity']
-            user_info['recharge'] = response['data']['income']
+            # user_info['recharge'] = response['data']['income']
             user_info['invitations'] = response['data']['count']
-            user_info['withdraw'] = response['data']['consume']
+            # user_info['withdraw'] = response['data']['consume']
             user_info['income'] = response['data']['money']
 
             response = Globals._requests_admin.request('get', f'/sqx_fast/moneyDetails/selectUserMoney?userId={userId}')
@@ -307,7 +307,7 @@ class UsersAmericaTab(QWidget):
                 'unique_columns': ['userId'],
             }, None)
             
-            self.update_row(user_info)
+            Globals._WS.users_america_update_row_signal.emit(user_info)
             Globals._WS.progress_hide_signal.emit(1)
             Globals._Log.info(self.user, f'Updated user data of {phone} successfully.')
 
@@ -317,6 +317,7 @@ class UsersAmericaTab(QWidget):
     def update_users(self):
         self.button_update_all.setEnabled(False)
         Globals.run_task(self.update_users_worker)
+        Globals.run_task(self.update_withdraw_and_recharge_worker)
 
     def update_users_worker(self):
         Globals._Log.info(self.user, 'Starting users update process.')
@@ -344,14 +345,10 @@ class UsersAmericaTab(QWidget):
                 break
         
         Globals._WS.progress_hide_signal.emit(0)
-        self.button_update_all.setEnabled(True)
-
-    def update_withdraw_and_recharge(self):
-        self.button_update_withdraw.setEnabled(False)
-        Globals.run_task(self.update_withdraw_and_recharge_worker)
 
     def update_withdraw_and_recharge_worker(self):
         Globals._Log.info(self.user, 'Starting withdraw and recharge update process.')
+        q = Queue()
         today = datetime.date.today().strftime('%Y-%m-%d')
         page = 1
         totalPage = 0
@@ -376,7 +373,8 @@ class UsersAmericaTab(QWidget):
                 'table_name': 'withdraw',
                 'datas': data_list,
                 'unique_columns': ['id']
-            }, None)
+            }, q)
+            q.get()
 
             page += 1
             if page > totalPage:
@@ -403,11 +401,46 @@ class UsersAmericaTab(QWidget):
                 'table_name': 'recharge',
                 'datas': data_list,
                 'unique_columns': ['id']
-            }, None)
+            }, q)
+            q.get()
 
             page += 1
             if page > totalPage:
                 Globals._Log.info(self.user, 'Recharge update process completed successfully.')
                 break
-        
-        self.button_update_withdraw.setEnabled(True)
+
+        self.update_withdraw_and_recharge_to_users()
+
+    def update_withdraw_and_recharge_to_users(self):
+        q = Queue()
+        Globals._WS.database_operation_signal.emit('read', {
+            'table_name': 'withdraw',
+            'condition': 'state=1'
+        }, q)
+        data = q.get()
+        df_withdraw = pd.DataFrame(data, columns=self.columns_withdraw)
+        df_withdraw['withdraw'] = df_withdraw['money'].astype(float).fillna(0)
+        summary_withdraw = df_withdraw.groupby('userId')['withdraw'].sum().reset_index()
+
+        Globals._WS.database_operation_signal.emit('read', {
+            'table_name': 'recharge',
+            'condition': 'state=1'
+        }, q)
+        data = q.get()
+        df_recharge = pd.DataFrame(data, columns=self.columns_recharge)
+        df_recharge['recharge'] = df_recharge['money'].astype(float).fillna(0)
+        summary_recharge = df_recharge.groupby('userId')['recharge'].sum().reset_index()
+
+        df = pd.merge(summary_withdraw, summary_recharge, on='userId', how='outer').fillna(0)
+        df_dict = df.to_dict(orient = 'records')
+
+        Globals._WS.database_operation_signal.emit('bulk_upsert', {
+            'table_name': 'users_america',
+            'datas': df_dict,
+            'unique_columns': ['userId']
+        }, q)
+        q.get()
+
+        Globals._Log.info(self.user, 'Update withdraw and recharge to users_america successfully.')
+        self.reload()
+        self.button_update_all.setEnabled(True)

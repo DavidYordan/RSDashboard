@@ -189,9 +189,9 @@ class AgentsAmericaTab(QWidget):
     def show_context_menu(self, pos, index):
         menu = QMenu()
 
-        # row = index.row()
+        row = index.row()
         # phone = self.table.item(row, self.columns_display.index('mobile')).text()
-        # invitation_code = self.table.item(row, self.columns_display.index('invitationCode')).text()
+        invitation_code = self.table.item(row, self.columns_display.index('userId')).text()
         # invitation_link = f'{Globals._BASE_URL_AMERICA}/pages/login/login?inviterType=0&invitation={invitation_code}'
 
         # action_add_creator = menu.addAction('Add Creator')
@@ -202,6 +202,9 @@ class AgentsAmericaTab(QWidget):
 
         action_set_team = menu.addAction('Set Inviter')
         action_set_team.triggered.connect(self.set_inviter)
+
+        action_show_familyTree = menu.addAction('Show FamilyTree')
+        action_show_familyTree.triggered.connect(lambda: Globals._FamilyTree.show(invitation_code))
 
         # action_copy_tk_link = menu.addAction('Copy invitation Link')
         # action_copy_tk_link.triggered.connect(lambda: QApplication.clipboard().setText(invitation_link))
