@@ -34,14 +34,14 @@ class ProgressDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle('Progress')
-        self.setModal(True)
+        # self.setModal(True)
 
         layout = QVBoxLayout(self)
         self.label_message = QLabel('Waiting...')
         layout.addWidget(self.label_message)
         self.label_progress = QLabel('0/0')
         layout.addWidget(self.label_progress)
-        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowCloseButtonHint)
+        # self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowCloseButtonHint)
 
         Globals._WS.progress_hide_signal.connect(self.hide_progress)
         Globals._WS.progress_reset_signal.connect(self.reset)

@@ -42,15 +42,18 @@ class AgentsAmericaTab(QWidget):
 
         Globals._Log.info(self.user, 'Successfully initialized.')
 
-    # def add_creator(self):
-    #     current_index = self.table.currentIndex()
-    #     row = current_index.row()
-    #     data = {
-    #         'team': self.table.item(row, self.columns_display.index('team')).text(),
-    #         'userId': self.table.item(row, self.columns_display.index('userId')).text(),
-    #         'phone': self.table.item(row, self.columns_display.index('mobile')).text()
-    #     }
-    #     Globals._WS.autoCreatorTab_add_creator_signal.emit(data)
+    def add_creator(self):
+        current_index = self.table.currentIndex()
+        row = current_index.row()
+        userId = self.table.item(row, self.columns_display.index('userId')).text()
+        data = {
+            'team': self.table.item(row, self.columns_display.index('team')).text(),
+            'userId': userId,
+            'phone': self.table.item(row, self.columns_display.index('userName')).text(),
+            'isAgent': '1',
+            'invitationCode': userId
+        }
+        Globals._WS.autoCreatorTab_add_creator_signal.emit(data)
 
     def add_row(self, data, row=-1):
         if row == -1:
@@ -194,8 +197,8 @@ class AgentsAmericaTab(QWidget):
         invitation_code = self.table.item(row, self.columns_display.index('userId')).text()
         # invitation_link = f'{Globals._BASE_URL_AMERICA}/pages/login/login?inviterType=0&invitation={invitation_code}'
 
-        # action_add_creator = menu.addAction('Add Creator')
-        # action_add_creator.triggered.connect(self.add_creator)
+        action_add_creator = menu.addAction('Add Creator')
+        action_add_creator.triggered.connect(self.add_creator)
 
         action_set_team = menu.addAction('Set Team')
         action_set_team.triggered.connect(self.set_team)

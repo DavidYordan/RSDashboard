@@ -229,6 +229,14 @@ class AddCreatorDialog(QDialog):
         self.combo_isAgent.setCurrentText(str(data.get('isAgent', 0)))
         self.lineedit_expected.setText(str(data.get('expected', 2)))
 
+    def is_agent_changed(self):
+        if self.combo_isAgent.currentText() == '1':
+            self.lineedit_courseID.setEnabled(True)
+            self.lineedit_detailsID.setEnabled(True)
+        else:
+            self.lineedit_courseID.setEnabled(False)
+            self.lineedit_detailsID.setEnabled(False)
+
     def make_tasks(self):
         startTime = self.timeedit_startTime.dateTime().toSecsSinceEpoch()
         endTime = self.timeedit_endTime.dateTime().toSecsSinceEpoch()
@@ -295,8 +303,23 @@ class AddCreatorDialog(QDialog):
         layout_isAgent.addWidget(QLabel('Is Agent:'))
         self.combo_isAgent = QComboBox(self)
         self.combo_isAgent.addItems(['0', '1'])
+        self.combo_isAgent.currentTextChanged.connect(self.is_agent_changed)
         layout_isAgent.addWidget(self.combo_isAgent)
         layout.addLayout(layout_isAgent)
+
+        layout_courseID = QHBoxLayout()
+        layout_courseID.addWidget(QLabel('Course ID:'))
+        self.lineedit_courseID = QLineEdit(self)
+        self.lineedit_courseID.setEnabled(False)
+        layout_courseID.addWidget(self.lineedit_courseID)
+        layout.addLayout(layout_courseID)
+
+        layout_detailsID = QHBoxLayout()
+        layout_detailsID.addWidget(QLabel('Details ID:'))
+        self.lineedit_detailsID = QLineEdit(self)
+        self.lineedit_detailsID.setEnabled(False)
+        layout_detailsID.addWidget(self.lineedit_detailsID)
+        layout.addLayout(layout_detailsID)
 
         layout_startTime = QHBoxLayout()
         layout_startTime.addWidget(QLabel('Start Time:'))
@@ -383,13 +406,17 @@ class AddCreatorDialog(QDialog):
 
     def submit_data(self):
         data = self.make_tasks()
+        isAgent = int(self.combo_isAgent.currentText())
+        invitationCode = self.label_invitationCode.text()
+        if isAgent:
+            invitationCode = f'{invitationCode}|{self.lineedit_courseID.text()}|{self.lineedit_detailsID.text()}'
         data.update({
             'id': int(self.label_id.text()),
             'team': self.lineedit_team.text(),
             'userId': int(self.label_userId.text()),
             'phone': self.lineedit_phone.text(),
-            'invitationCode': self.label_invitationCode.text(),
-            'isAgent': int(self.combo_isAgent.currentText())
+            'invitationCode': invitationCode,
+            'isAgent': isAgent
         })
 
         Globals._WS.database_operation_signal.emit('insert', {
@@ -415,7 +442,6 @@ class AddCreatorDialog(QDialog):
         self.submit_validate.setEnabled(False)
         try:
             phone = self.lineedit_phone.text()
-            data = {}
 
             start_time = self.timeedit_startTime.dateTime().toPyDateTime()
             end_time = self.timeedit_endTime.dateTime().toPyDateTime()
@@ -434,16 +460,30 @@ class AddCreatorDialog(QDialog):
                 Globals._Log.error(self.user, f'Validation failed: Each task must have at least 10 seconds, current average is {average_seconds_per_task} seconds.')
                 return
             Globals._Log.warning(self.user, f'speed: {average_seconds_per_task}')
+
+            isAgent = int(self.combo_isAgent.currentText())
+            if isAgent:
+                courseID = self.lineedit_courseID.text()
+                detailsID = self.lineedit_detailsID.text()
+                if not courseID or not detailsID:
+                    Globals._Log.error(self.user, f'Validation failed: Course ID and Details ID are required.')
+                    return
             
             phone = self.lineedit_phone.text()
             if not phone:
                 Globals._Log.error(self.user, f'Validation failed: Phone is a required field.')
                 return
             
-            Globals._WS.database_operation_signal.emit('read', {
-                'table_name': 'users_america',
-                'condition': f'phone="{phone}"'
-            }, self.queue)
+            if isAgent:
+                Globals._WS.database_operation_signal.emit('read', {
+                    'table_name': 'agents_america',
+                    'condition': f'userName="{phone}"'
+                }, self.queue)
+            else:
+                Globals._WS.database_operation_signal.emit('read', {
+                    'table_name': 'users_america',
+                    'condition': f'phone="{phone}"'
+                }, self.queue)
             res = self.queue.get()
 
             if len(res) != 1:

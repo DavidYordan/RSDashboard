@@ -240,7 +240,7 @@ class RSDashboard(QMainWindow):
         self.action_autoCreatorWorker_stop.setEnabled(False)
 
 if __name__ == '__main__':
-    os.environ['PLAYWRIGHT_BROWSERS_PATH'] = './temp'
+    os.environ['PLAYWRIGHT_BROWSERS_PATH'] = '0'
     os.environ['XDG_CACHE_HOME'] = './temp'
     os.environ['LOCALAPPDATA'] = './temp'
     os.environ['TEMP'] = './temp'

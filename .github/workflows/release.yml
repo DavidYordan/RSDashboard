@@ -22,6 +22,12 @@ jobs:
         pip install pyinstaller
         pip install -r requirements.txt
 
+    - name: Install Playwright and browsers
+      run: |
+        pip install playwright
+        $env:PLAYWRIGHT_BROWSERS_PATH = "0"
+        playwright install chromium
+
     - name: Build Secondary EXE (RSDashboard)
       run: pyinstaller main.spec
 

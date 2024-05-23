@@ -16,6 +16,7 @@ from PyQt6.QtCore import (
 )
 from queue import Empty, Queue
 from twocaptcha import TwoCaptcha
+from urllib.parse import quote
 from uuid import uuid4
 
 from globals import Globals
@@ -178,10 +179,12 @@ class AdminRequests(object):
                 if response.status_code != 200:
                     raise Exception(f'Status code {response.status_code}')
                 response_data = response.json()
-                if response_data.get('code', 401) == 401:
+                if response_data.get('code') == 401:
                     Globals._Log.warning(self.user, 'Authentication failed, invalid token.')
                     self.token_manager.refresh_token_with_playwright()
                     continue
+                if response_data.get('code') != 0:
+                    raise Exception(f'Request failed: {response_data}')
                 return response.json()
             except:
                 raise
@@ -287,15 +290,27 @@ class UserRequests(object):
     def create_user(invitationCode='', style='phone'):
 
         def _register_user():
-            params = {
-                'password': password,
-                'phone': phone,
-                'msg': '9999',
-                'inviterCode': invitationCode,
-                'inviterType': '0',
-                'inviterUrl': '',
-                'platform': 'h5'
-            }
+            if '|' in invitationCode:
+                code, courseId, detailsId = invitationCode.split('|')
+                params = {
+                    'password': password,
+                    'phone': phone,
+                    'msg': '9999',
+                    'inviterCode': code,
+                    'inviterType': '1',
+                    'inviterUrl': quote(f'/me/detail/detail?id={courseId}&courseDetailsId={detailsId}'),
+                    'platform': 'h5'
+                }
+            else:
+                params = {
+                    'password': password,
+                    'phone': phone,
+                    'msg': '9999',
+                    'inviterCode': invitationCode,
+                    'inviterType': '0',
+                    'inviterUrl': '',
+                    'platform': 'h5'
+                }
             res = requests.post(
                 f'{Globals._BASE_URL_AMERICA}/sqx_fast/app/Login/registerCode',
                 headers={'Content-Type': 'application/x-www-form-urlencoded'},
@@ -311,9 +326,6 @@ class UserRequests(object):
             user['realpassword'] = password
             user['token'] = data.get('token')
             return user
-        
-        if isinstance(invitationCode, int):
-            raise ValueError(f'Unsupported agent: {invitationCode}')
         
         if style == 'phone':
             phone = PhoneGenerator.generate_phone()
