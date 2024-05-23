@@ -425,12 +425,20 @@ class AddCreatorDialog(QDialog):
         }, None)
 
         team_data = {key: data[key] for key in ['userId', 'team']}
-        Globals._WS.database_operation_signal.emit('upsert', {
-            'table_name': 'users_america',
-            'data': team_data,
-            'unique_columns': ['userId'],
-        }, None)
-        Globals._WS.users_america_update_row_signal.emit(team_data)
+        if isAgent:
+            Globals._WS.database_operation_signal.emit('upsert', {
+                'table_name': 'agents_america',
+                'data': team_data,
+                'unique_columns': ['userId'],
+            }, None)
+            Globals._WS.agents_america_update_row_signal.emit(team_data)
+        else:
+            Globals._WS.database_operation_signal.emit('upsert', {
+                'table_name': 'users_america',
+                'data': team_data,
+                'unique_columns': ['userId'],
+            }, None)
+            Globals._WS.users_america_update_row_signal.emit(team_data)
 
         self.parent().add_row(data)
 
