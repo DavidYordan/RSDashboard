@@ -9,7 +9,8 @@ from PyQt6.QtCore import(
     pyqtSlot,
     QDateTime,
     QRunnable,
-    Qt
+    Qt,
+    QTime
 )
 from PyQt6.QtGui import (
     QIntValidator
@@ -200,8 +201,9 @@ class AddCreatorDialog(QDialog):
             expected = int(self.lineedit_expected.text())
             if expected % 2 != 0:
                 return
-            self.timeedit_startTime.setDateTime(QDateTime.currentDateTime())
-            self.timeedit_endTime.setDateTime(QDateTime.currentDateTime().addSecs(60 + 60 * expected))
+            current_datetime = QDateTime.currentDateTime()
+            self.timeedit_startTime.setDateTime(current_datetime)
+            self.timeedit_endTime.setDateTime(QDateTime(current_datetime.date(), QTime(23, 10)))
             phone_count = expected / 2
             remain_count = random.uniform(phone_count * 0.5, phone_count * 2.5)
             email_count = random.uniform(0.8, 0.9) * remain_count - random.choices([0, 1], [0.5, 0.5], k=1)[0]
@@ -278,6 +280,7 @@ class AddCreatorDialog(QDialog):
         layout_team = QHBoxLayout()
         layout_team.addWidget(QLabel('Team:'))
         self.lineedit_team = QLineEdit(self)
+        self.lineedit_team.textChanged.connect(self.strip_team)
         layout_team.addWidget(self.lineedit_team)
         layout.addLayout(layout_team)
 
@@ -290,6 +293,7 @@ class AddCreatorDialog(QDialog):
         layout_phone = QHBoxLayout()
         layout_phone.addWidget(QLabel('Phone:'))
         self.lineedit_phone = QLineEdit(self)
+        self.lineedit_phone.textChanged.connect(self.strip_phone)
         layout_phone.addWidget(self.lineedit_phone)
         layout.addLayout(layout_phone)
 
@@ -403,6 +407,16 @@ class AddCreatorDialog(QDialog):
         start = start if start % 2 == 0 else start + 1
         end = end if end % 2 == 0 else end - 1
         self.lineedit_expected.setText(str(random.randint(start // 2, end // 2) * 2))
+
+    def strip_phone(self):
+        self.lineedit_team.blockSignals(True)
+        self.lineedit_phone.setText(self.lineedit_phone.text().strip())
+        self.lineedit_team.blockSignals(False)
+
+    def strip_team(self):
+        self.lineedit_phone.blockSignals(True)
+        self.lineedit_team.setText(self.lineedit_team.text().strip())
+        self.lineedit_phone.blockSignals(False)
 
     def submit_data(self):
         data = self.make_tasks()

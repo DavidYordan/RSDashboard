@@ -1,7 +1,6 @@
 import datetime
 import pandas as pd
 
-from collections import defaultdict
 from PyQt6.QtCore import(
     pyqtSlot,
     Qt
@@ -103,7 +102,7 @@ class UsersAmericaTab(QWidget):
             if isinstance(invitationCode, int):
                 Globals._Log.error(self.user, f'Unsupported agent: {new_invitationCode}')
                 return
-            Globals.run_task(UserRequests.create_user, invitationCode=new_invitationCode)
+            Globals.run_task(UserRequests.create_user, invitationCode=new_invitationCode.strip())
 
     def find_row_by_columnName(self, columnValue, columnName='userId'):
         column_index = self.columns_display.index(columnName)
@@ -178,6 +177,7 @@ class UsersAmericaTab(QWidget):
         new_team, ok = QInputDialog.getText(self, f'Set Team For {phone}', 'Enter new team:', QLineEdit.EchoMode.Normal, current_team)
         
         if ok:
+            new_team = new_team.strip()
             self.table.item(row, self.columns_display.index('team')).setText(new_team)
             Globals._WS.database_operation_signal.emit('upsert', {
                 'table_name': 'users_america',
@@ -278,7 +278,7 @@ class UsersAmericaTab(QWidget):
 
         new_phone, ok = QInputDialog.getText(self, 'Phone', 'Please input phone:', text=phone)
         if ok and new_phone:
-            Globals.run_task(self.update_user_worker, phone=new_phone)
+            Globals.run_task(self.update_user_worker, phone=new_phone.strip())
 
     def update_user_worker(self, phone):
         Globals._Log.info(self.user, f'Starting {phone} update process.')

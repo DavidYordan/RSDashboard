@@ -50,6 +50,7 @@ class SearchDialog(QDialog):
 
         self.top_layout = QHBoxLayout()
         self.search_field = QLineEdit(self)
+        self.search_field.textChanged.connect(self.strip_input)
         self.search_button = QPushButton("Search", self)
         self.top_layout.addWidget(self.search_field)
         self.top_layout.addWidget(self.search_button)
@@ -111,6 +112,12 @@ class SearchDialog(QDialog):
 
         self.current_index = 0
         self.highlight_result()
+
+    def strip_input(self):
+        current_text = self.search_field.text().strip()
+        self.search_field.blockSignals(True)
+        self.search_field.setText(current_text)
+        self.search_field.blockSignals(False)
 
 class RSDashboard(QMainWindow):
     def __init__(self):
@@ -219,7 +226,7 @@ class RSDashboard(QMainWindow):
         self.tab_right = QTabWidget()
         splitter.addWidget(self.tab_right)
 
-        splitter.setSizes([300, 300])
+        splitter.setSizes([1, 0])
 
         layout_main.addWidget(Globals._log_label, 1)
         Globals._log_label.setWordWrap(True)

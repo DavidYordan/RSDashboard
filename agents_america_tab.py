@@ -128,6 +128,7 @@ class AgentsAmericaTab(QWidget):
         new_inviter, ok = QInputDialog.getText(self, f'Set Inviter For {userName}', 'Enter new inviter:', QLineEdit.EchoMode.Normal, current_inviter)
         
         if ok:
+            new_inviter = new_inviter.strip()
             self.table.item(row, self.columns_display.index('inviterCode')).setText(new_inviter)
             Globals._WS.database_operation_signal.emit('upsert', {
                 'table_name': 'agents_america',
@@ -151,6 +152,7 @@ class AgentsAmericaTab(QWidget):
         new_team, ok = QInputDialog.getText(self, f'Set Team For {userName}', 'Enter new team:', QLineEdit.EchoMode.Normal, current_team)
         
         if ok:
+            new_team = new_team.strip()
             self.table.item(row, self.columns_display.index('team')).setText(new_team)
             Globals._WS.database_operation_signal.emit('upsert', {
                 'table_name': 'agents_america',
