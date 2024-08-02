@@ -41,7 +41,7 @@ class UsersAmericaTab(QWidget):
         self.columns_recharge = q.get()
 
         self.columns_display = [
-            'team', 'userId', 'phone', 'iscreator', 'income', 'withdraw', 'recharge', 'jifen', 'money', 'invitations', 'invitationType', 'platform', 'inviterCode', 'invitationCode'
+            'team', 'userId', 'phone', 'areaCode', 'fake', 'income', 'withdraw', 'recharge', 'jifen', 'money', 'invitations', 'invitationType', 'platform', 'inviterCode', 'invitationCode'
         ]
 
         Globals._WS.users_america_update_row_signal.connect(self.update_row)
@@ -211,7 +211,7 @@ class UsersAmericaTab(QWidget):
         middle_layout = QHBoxLayout()
         layout.addLayout(middle_layout)
         self.table = TableWidget(0, len(self.columns_display))
-        self.table.setNumericColumns([self.columns_display.index(column) for column in ['userId', 'income', 'withdraw', 'recharge', 'jifen', 'money']])
+        self.table.setNumericColumns([self.columns_display.index(column) for column in ['userId', 'income', 'withdraw', 'recharge', 'jifen', 'money', 'fake', 'areaCode']])
         middle_layout.addWidget(self.table)
         self.table.setHorizontalHeaderLabels(self.columns_display)
 

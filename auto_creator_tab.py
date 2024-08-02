@@ -144,6 +144,8 @@ class AutoCreatorTab(QWidget):
         action_copy_tk_link = menu.addAction('Copy invitation Link')
         action_copy_tk_link.triggered.connect(lambda: QApplication.clipboard().setText(invitation_link))
 
+        action_pause = menu.addAction('Pause')
+
         menu.exec(self.table.viewport().mapToGlobal(pos))
 
     def table_mouse_press_event(self, event):

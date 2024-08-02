@@ -322,7 +322,6 @@ class UserRequests(object):
                 raise Exception(f'create_user: error msg {data["msg"]}')
             user = data.get('user')
             user['team'] = 'admin'
-            user['iscreator'] = 1
             user['realpassword'] = password
             user['token'] = data.get('token')
             return user

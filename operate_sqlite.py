@@ -411,7 +411,9 @@ class DBSchema(object):
                 "isdeleted": "BOOLEAN",
                 "iscreator": "BOOLEAN",
                 "realpassword": "TEXT",
-                "token": "TEXT"
+                "token": "TEXT",
+                "areaCode": "INTEGER",
+                "fake": "INTEGER"
             },
             "primary": "(userId)"
         },

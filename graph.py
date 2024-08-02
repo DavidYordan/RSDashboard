@@ -81,7 +81,7 @@ class FamilyTree(QDialog):
             child_node = self.family_tree[child_code]
             children_codes = child_node['children']
             if not children_codes:
-                if child_node['iscreator']:
+                if child_node['fake']:
                     leaf_nodes['robots'].append(child_code)
                 else:
                     leaf_nodes['reals'].append(child_code)
@@ -152,7 +152,7 @@ class FamilyTree(QDialog):
         df_users = pd.DataFrame(data, columns=self.columns_users)
         df_users = df_users[['userId', 'phone', 'invitationCode', 'inviterCode', 'withdraw', 'income', 'recharge', 'money', 'team', 'iscreator']]
         df_users[['withdraw', 'income', 'recharge', 'money']] = df_users[['withdraw', 'income', 'recharge', 'money']].astype(float).fillna(0)
-        df_users['iscreator'] = df_users['iscreator'].fillna(0).astype(int)
+        df_users['fake'] = df_users['fake'].fillna(0).astype(int)
         df_users['isAgent'] = 0
 
         Globals._WS.database_operation_signal.emit('read', {'table_name': 'agents_america'}, self.queue)
