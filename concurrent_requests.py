@@ -295,7 +295,7 @@ class UserRequests(object):
                 params = {
                     'password': password,
                     'phone': phone,
-                    'msg': '9999',
+                    'msg': '151515',
                     'inviterCode': code,
                     'inviterType': '1',
                     'inviterUrl': quote(f'/me/detail/detail?id={courseId}&courseDetailsId={detailsId}'),
@@ -305,7 +305,7 @@ class UserRequests(object):
                 params = {
                     'password': password,
                     'phone': phone,
-                    'msg': '9999',
+                    'msg': '151515',
                     'inviterCode': invitationCode,
                     'inviterType': '0',
                     'inviterUrl': '',
@@ -373,9 +373,10 @@ class UserRequests(object):
             time.sleep(1)
             self._retry(lambda: _process_payment(orderId))
             Globals._Log.info(self.user, f'VIP consumption processed successfully for {self.phone}.')
+            return True
         except Exception as e:
             Globals._Log.error('consume_vip', f'Failed to consume VIP for {self.phone}: {str(e)}')
-            raise
+            return False
     
 class EmailGenerator(object):
     fake = Faker('zh_TW')

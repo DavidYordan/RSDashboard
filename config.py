@@ -13,6 +13,7 @@ def config_init(parent):
     Globals._BASE_URL_AMERICA = config['BASE_URL_AMERICA']
     Globals._CLIENT_ID = config['CLIENT_ID']
     Globals._CLIENT_UUID = config['CLIENT_UUID']
+    Globals._CREATOR_STEP = config['CREATOR_STEP']
     Globals._ProgressDialog = ProgressDialog(parent)
     Globals._SQL = OperateSqlite(config['DB_PATH'])
     Globals._FamilyTree = FamilyTree(parent)

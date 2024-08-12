@@ -13,7 +13,7 @@ from PyQt6.QtCore import(
     QTime
 )
 from PyQt6.QtGui import (
-    QIntValidator
+    QDoubleValidator
 )
 from PyQt6.QtWidgets import (
     QAbstractItemView,
@@ -122,7 +122,7 @@ class AutoCreatorTab(QWidget):
         middle_layout = QHBoxLayout()
         layout.addLayout(middle_layout)
         self.table = TableWidget(0, len(self.columns))
-        self.table.setNumericColumns([self.columns.index(column) for column in ['id', 'userId', 'isAgent', 'expected', 'isCompleted']])
+        self.table.setNumericColumns([self.columns.index(column) for column in ['id', 'userId', 'isAgent', 'expected_min', 'expected_max']])
         middle_layout.addWidget(self.table)
         self.table.setHorizontalHeaderLabels(self.columns)
 
@@ -137,6 +137,7 @@ class AutoCreatorTab(QWidget):
         menu = QMenu()
 
         row = index.row()
+        id = self.table.item(row, self.columns.index('id')).text()
         phone = self.table.item(row, self.columns.index('phone')).text()
         invitation_code = self.table.item(row, self.columns.index('invitationCode')).text()
         invitation_link = f'{Globals._BASE_URL_AMERICA}/pages/login/login?inviterType=0&invitation={invitation_code}'
@@ -144,9 +145,31 @@ class AutoCreatorTab(QWidget):
         action_copy_tk_link = menu.addAction('Copy invitation Link')
         action_copy_tk_link.triggered.connect(lambda: QApplication.clipboard().setText(invitation_link))
 
-        action_pause = menu.addAction('Pause')
+        action_stop = menu.addAction('Stop')
+        action_stop.triggered.connect(lambda: self.stop_task(id))
 
         menu.exec(self.table.viewport().mapToGlobal(pos))
+
+    def stop_task(self, id):
+        completeTime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        Globals._WS.database_operation_signal.emit('upsert', {
+            'table_name': 'auto_creator',
+            'data': {
+                'id': id,
+                'isDaily': 0,
+                'remainTasks': '',
+                'completeTime': completeTime,
+                'updateTime': completeTime
+            },
+            'unique_columns': ['id']
+        }, None)
+        Globals._WS.autoCreatorTab_update_row_signal.emit({
+            'id': id,
+            'isDaily': 0,
+            'remainTasks': '',
+            'completeTime': completeTime,
+            'updateTime': completeTime
+        })
 
     def table_mouse_press_event(self, event):
         if event.button() == Qt.MouseButton.RightButton:
@@ -182,7 +205,6 @@ class AddCreatorDialog(QDialog):
         self.setModal(True)
         self.resize(240, 180)
         self.setup_ui()
-        self.lineedit_expected.textChanged.connect(self.expected_changed)
         self.fill_data(data)
         self.lineedit_team.textChanged.connect(self.validate_changed)
         self.lineedit_phone.textChanged.connect(self.validate_changed)
@@ -197,23 +219,6 @@ class AddCreatorDialog(QDialog):
         self.columns_user = self.queue.get()
 
         self.exec()
-
-    def expected_changed(self):
-        try:
-            expected = int(self.lineedit_expected.text())
-            if expected % 2 != 0:
-                return
-            current_datetime = QDateTime.currentDateTime()
-            self.timeedit_startTime.setDateTime(current_datetime)
-            self.timeedit_endTime.setDateTime(QDateTime(current_datetime.date(), QTime(23, 10)))
-            phone_count = expected / 2
-            remain_count = random.uniform(phone_count * 0.5, phone_count * 2.5)
-            email_count = random.uniform(0.8, 0.9) * remain_count - random.choices([0, 1], [0.5, 0.5], k=1)[0]
-            phone_count += remain_count - email_count
-            self.lineedit_phone_count.setText(str(round(phone_count)))
-            self.lineedit_email_count.setText(str(round(email_count)))
-        except:
-            return
 
     def fill_data(self, data):
         Globals._WS.database_operation_signal.emit('read', {
@@ -231,7 +236,11 @@ class AddCreatorDialog(QDialog):
         self.lineedit_phone.setText(data.get('phone', ''))
         self.label_invitationCode.setText(data.get('invitationCode', ''))
         self.combo_isAgent.setCurrentText(str(data.get('isAgent', 0)))
-        self.lineedit_expected.setText(str(data.get('expected', 2)))
+        self.lineedit_expected_min.setText(str(data.get('expected', 1.5)))
+        self.lineedit_expected_max.setText(str(data.get('expected', 1.5)))
+        current_datetime = QDateTime.currentDateTime()
+        self.timeedit_startTime.setDateTime(current_datetime)
+        self.timeedit_endTime.setDateTime(QDateTime(current_datetime.date(), QTime(23, 50)))
 
     def is_agent_changed(self):
         if self.combo_isAgent.currentText() == '1':
@@ -240,35 +249,6 @@ class AddCreatorDialog(QDialog):
         else:
             self.lineedit_courseID.setEnabled(False)
             self.lineedit_detailsID.setEnabled(False)
-
-    def make_tasks(self):
-        startTime = self.timeedit_startTime.dateTime().toSecsSinceEpoch()
-        endTime = self.timeedit_endTime.dateTime().toSecsSinceEpoch()
-        expected = int(self.lineedit_expected.text())
-        phone_count = int(self.lineedit_phone_count.text())
-        email_count = int(self.lineedit_email_count.text())
-        tasks_count = expected // 2
-        random_seconds = random.sample(range(startTime, endTime), phone_count + email_count)
-
-        tasks = []
-
-        for idx, sec in enumerate(random_seconds):
-            formatted_time = datetime.fromtimestamp(sec, self.tz).strftime('%Y-%m-%d %H:%M:%S')
-            if idx < tasks_count:
-                tasks.append([formatted_time, 'super_create', 'phone'])
-            elif idx < phone_count:
-                tasks.append([formatted_time, 'create', 'phone'])
-            else:
-                tasks.append([formatted_time, 'create', 'email'])
-
-        remainTasks = sorted(tasks, key=lambda x: x[0])
-
-        return {
-            'startTime': datetime.fromtimestamp(startTime, self.tz).strftime('%Y-%m-%d %H:%M:%S'),
-            'endTime': datetime.fromtimestamp(endTime, self.tz).strftime('%Y-%m-%d %H:%M:%S'),
-            'expected': expected,
-            'remainTasks': str(remainTasks)
-        }
 
     def setup_ui(self):
         layout = QVBoxLayout(self)
@@ -313,6 +293,13 @@ class AddCreatorDialog(QDialog):
         layout_isAgent.addWidget(self.combo_isAgent)
         layout.addLayout(layout_isAgent)
 
+        layout_isDaily = QHBoxLayout()
+        layout_isDaily.addWidget(QLabel('Daily:'))
+        self.combo_isDaily = QComboBox(self)
+        self.combo_isDaily.addItems(['0', '1'])
+        layout_isDaily.addWidget(self.combo_isDaily)
+        layout.addLayout(layout_isDaily)
+
         layout_courseID = QHBoxLayout()
         layout_courseID.addWidget(QLabel('Course ID:'))
         self.lineedit_courseID = QLineEdit(self)
@@ -342,40 +329,15 @@ class AddCreatorDialog(QDialog):
         layout.addLayout(layout_endTime)
 
         layout_expected = QHBoxLayout()
-        layout_expected.addWidget(QLabel('expected:'))
-        self.lineedit_expected = QLineEdit(self)
-        self.lineedit_expected.setValidator(QIntValidator(2, 500))
-        layout_expected.addWidget(self.lineedit_expected)
+        layout_expected.addWidget(QLabel('min:'))
+        self.lineedit_expected_min = QLineEdit(self)
+        self.lineedit_expected_min.setValidator(QDoubleValidator(1.5, 450, 1))
+        layout_expected.addWidget(self.lineedit_expected_min)
+        layout_expected.addWidget(QLabel('max:'))
+        self.lineedit_expected_max = QLineEdit(self)
+        self.lineedit_expected_max.setValidator(QDoubleValidator(1.5, 450, 1))
+        layout_expected.addWidget(self.lineedit_expected_max)
         layout.addLayout(layout_expected)
-
-        layout_count = QHBoxLayout()
-        layout_count.addWidget(QLabel('phone:'))
-        self.lineedit_phone_count = QLineEdit(self)
-        self.lineedit_expected.setValidator(QIntValidator(1, 150))
-        layout_count.addWidget(self.lineedit_phone_count)
-        layout_count.addWidget(QLabel('email:'))
-        self.lineedit_email_count = QLineEdit(self)
-        self.lineedit_email_count.setValidator(QIntValidator(1, 150))
-        layout_count.addWidget(self.lineedit_email_count)
-        layout.addLayout(layout_count)
-
-        layout_gear_5 = QHBoxLayout()
-        layout_gear_5.setSpacing(5)
-        for i in range(1, 6):
-            btn = QPushButton(str(i), self)
-            btn.setFixedSize(30, 20)
-            btn.clicked.connect(self.set_random_value)
-            layout_gear_5.addWidget(btn)
-        layout.addLayout(layout_gear_5)
-
-        layout_gear_10 = QHBoxLayout()
-        layout_gear_10.setSpacing(5)
-        for i in range(6, 11):
-            btn = QPushButton(str(i), self)
-            btn.setFixedSize(30, 20)
-            btn.clicked.connect(self.set_random_value)
-            layout_gear_10.addWidget(btn)
-        layout.addLayout(layout_gear_10)
 
         layout_button = QHBoxLayout()
         self.submit_validate = QPushButton('Validate')
@@ -388,28 +350,6 @@ class AddCreatorDialog(QDialog):
         self.submit_validate.clicked.connect(self.validate)
         self.submit_button.clicked.connect(self.submit_data)
 
-    def set_random_value(self):
-
-        def range_for_bin(bin_id):
-            base_start = 2
-            base_end = 10
-            increment = 10
-
-            if bin_id == 1:
-                start = base_start
-                end = base_end
-            else:
-                start = range_for_bin(bin_id - 1)[1] + 2
-                end = start + (bin_id - 1) * increment - 2
-
-            return (start, end)
-
-        gear = int(self.sender().text())
-        start, end = range_for_bin(gear)
-        start = start if start % 2 == 0 else start + 1
-        end = end if end % 2 == 0 else end - 1
-        self.lineedit_expected.setText(str(random.randint(start // 2, end // 2) * 2))
-
     def strip_phone(self):
         self.lineedit_team.blockSignals(True)
         self.lineedit_phone.setText(self.lineedit_phone.text().strip())
@@ -421,19 +361,25 @@ class AddCreatorDialog(QDialog):
         self.lineedit_phone.blockSignals(False)
 
     def submit_data(self):
-        data = self.make_tasks()
         isAgent = int(self.combo_isAgent.currentText())
         invitationCode = self.label_invitationCode.text()
         if isAgent:
             invitationCode = f'{invitationCode}|{self.lineedit_courseID.text()}|{self.lineedit_detailsID.text()}'
-        data.update({
+        data = {
             'id': int(self.label_id.text()),
             'team': self.lineedit_team.text(),
             'userId': int(self.label_userId.text()),
             'phone': self.lineedit_phone.text(),
             'invitationCode': invitationCode,
-            'isAgent': isAgent
-        })
+            'isAgent': isAgent,
+            'isDaily': int(self.combo_isDaily.currentText()),
+            'total': "0",
+            'expected_min': self.lineedit_expected_min.text(),
+            'expected_max': self.lineedit_expected_max.text(),
+            'startTime': self.tz.localize(self.timeedit_startTime.dateTime().toPyDateTime()).strftime('%Y-%m-%d %H:%M:%S'),
+            'endTime': self.tz.localize(self.timeedit_endTime.dateTime().toPyDateTime()).strftime('%Y-%m-%d %H:%M:%S'),
+            'completeTime': '',
+        }
 
         Globals._WS.database_operation_signal.emit('insert', {
             'table_name': 'auto_creator',
@@ -473,17 +419,11 @@ class AddCreatorDialog(QDialog):
                 Globals._Log.error(self.user, f'Validation failed: Start time must be less than end time.')
                 return
             
-            expected = int(self.lineedit_expected.text())
-            if expected < 2 or expected > 500 or expected % 2 != 0:
-                Globals._Log.error(self.user, f'validate: Only allowed even expected in [2, 500]')
+            expected_min = float(self.lineedit_expected_min.text())
+            expected_max = float(self.lineedit_expected_max.text())
+            if expected_min > expected_max:
+                Globals._Log.error(self.user, f'validate: expected min must be less than expected max.')
                 return
-            total_tasks = expected * 4
-            time_period = (end_time - start_time).total_seconds()
-            average_seconds_per_task = time_period / total_tasks
-            if average_seconds_per_task < 10:
-                Globals._Log.error(self.user, f'Validation failed: Each task must have at least 10 seconds, current average is {average_seconds_per_task} seconds.')
-                return
-            Globals._Log.warning(self.user, f'speed: {average_seconds_per_task}')
 
             isAgent = int(self.combo_isAgent.currentText())
             if isAgent:
@@ -526,7 +466,7 @@ class AddCreatorDialog(QDialog):
 
             Globals._WS.database_operation_signal.emit('read', {
                 'table_name': 'auto_creator',
-                'condition': f'phone="{phone}" AND isCompleted IS NOT TRUE'
+                'condition': f'phone="{phone}" AND completeTime = ""'
             }, self.queue)
             res = self.queue.get()
             if res:
@@ -561,11 +501,11 @@ class AutoCreatorWorker(QRunnable):
         self.user = 'AutoCreatorWorker'
 
     def add_task(self, data):
-        tasks_str = data.get('remainTasks', '')
+        tasks_str = self.make_remain_tasks(data)
         if not tasks_str:
-            Globals._Log.error(self.user, f'add_task: No task found: {data}')
+            Globals._Log.error(self.user, f'add_task: Task format is incorrect: {data}')
             return
-        
+
         try:
             tasks = literal_eval(tasks_str)
             if not isinstance(tasks, list):
@@ -600,7 +540,18 @@ class AutoCreatorWorker(QRunnable):
     def get_tasks(self):
         Globals._WS.database_operation_signal.emit('read', {
             'table_name': 'auto_creator',
-            'condition': 'isCompleted IS NOT TRUE'
+            'condition': 'isDaily is TRUE'
+        }, self.queue_database)
+        data_list = self.queue_database.get()
+        for data in data_list:
+            data_dict = {}
+            for idx, col in enumerate(self.columns):
+                data_dict[col] = data[idx]
+            self.make_daily_task(data_dict)
+            
+        Globals._WS.database_operation_signal.emit('read', {
+            'table_name': 'auto_creator',
+            'condition': 'isDaily is NOT TRUE AND completeTime = ""'
         }, self.queue_database)
         data_list = self.queue_database.get()
 
@@ -616,25 +567,85 @@ class AutoCreatorWorker(QRunnable):
         self.columns = self.queue_database.get()
     
     def make_consume_task(self, userId):
-        delay = random.choices([random.randint(60, 300), random.randint(300, 900), random.randint(900, 1800)], [0.6, 0.3, 0.1], k=1)[0] + int(time.time())
+        delay = random.randint(5, 300) + int(time.time())
         return [datetime.fromtimestamp(delay, self.tz).strftime('%Y-%m-%d %H:%M:%S'), 'consume', userId]
-    
-    def make_recharge_task(self, userId):
-        delay = int(time.time()) + random.randint(180, 900)
-        return [datetime.fromtimestamp(delay, self.tz).strftime('%Y-%m-%d %H:%M:%S'), 'recharge', userId]
-    
-    def recharge(self, userId):
-        if not Globals._requests_admin.request('get', f'/sqx_fast/user/{userId}'):
-            return False
-        if not Globals._requests_admin.request('get', f'/sqx_fast/moneyDetails/selectUserMoney?userId={userId}'):
-            return False
-        if not Globals._requests_admin.request('post', f'/sqx_fast/user/addCannotMoney/{userId}/4'):
-            return False
-        if not Globals._requests_admin.request('get', f'/sqx_fast/user/{userId}'):
-            return False
-        if not Globals._requests_admin.request('get', f'/sqx_fast/moneyDetails/selectUserMoney?userId={userId}'):
-            return False
-        return True
+
+    def make_daily_task(self, data):
+        endTime_date = datetime.strptime(data['endTime'], self.format_timestamp_str).date()
+        today_date = datetime.now(self.tz).date()
+        completeTime = data['completeTime']
+        completeTime_date = datetime.strptime(completeTime, self.format_timestamp_str).date() if completeTime else None
+        if completeTime_date and completeTime_date >= endTime_date:
+            Globals._WS.database_operation_signal.emit('upsert', {
+                'table_name': 'auto_creator',
+                'data': {
+                    'id': data['id'],
+                    'isDaily': 0
+                },
+                'unique_columns': ['id']
+            }, None)
+            Globals._WS.autoCreatorTab_update_row_signal.emit({
+                'id': data['id'],
+                'isDaily': 0
+            })
+            return
+        if today_date == completeTime_date:
+            return
+        if data['userId'] not in self.in_processing:
+            self.add_task(data)
+
+    def make_remain_tasks(self, data):
+
+        def _round_count(value):
+            return max(0, int(value) + random.choices([-1, 0, 1], [0.2, 0.6, 0.2])[0])
+
+        tasks_str = data.get('remainTasks', '')
+        if tasks_str:
+            return tasks_str
+        excepted_min = float(data['expected_min'])
+        excepted_max = float(data['expected_max'])
+        count_list = []
+        count = 0
+        while count * Globals._CREATOR_STEP <= excepted_max:
+            if excepted_min <= count * Globals._CREATOR_STEP <= excepted_max:
+                count_list.append(count)
+            count += 1
+        count = random.choice(count_list)
+        remain_count = random.uniform(count * 0.5, count * 1.5)
+        email_count = random.uniform(0.6, 0.9) * remain_count
+        phone_count = _round_count(remain_count - email_count)
+        email_count = _round_count(email_count)
+        startTime = datetime.strptime(data['startTime'], self.format_timestamp_str).timestamp()
+        if data['isDaily'] == 1:
+            endTime = datetime.strptime(datetime.now(self.tz).strftime('%Y-%m-%d 23:50:00'), self.format_timestamp_str).timestamp()
+        else:
+            endTime = datetime.strptime(data['endTime'], self.format_timestamp_str).timestamp()
+        tasks = []
+        for i in range(count + phone_count + email_count):
+            delay = random.uniform(startTime, endTime)
+            if i < count:
+                tasks.append([datetime.fromtimestamp(delay, self.tz).strftime('%Y-%m-%d %H:%M:%S'), 'super_create', 'phone'])
+            elif i < count + phone_count:
+                tasks.append([datetime.fromtimestamp(delay, self.tz).strftime('%Y-%m-%d %H:%M:%S'), 'create', 'phone'])
+            else:
+                tasks.append([datetime.fromtimestamp(delay, self.tz).strftime('%Y-%m-%d %H:%M:%S'), 'create', 'email'])
+        remainTasks = sorted(tasks, key=lambda x: x[0])
+        tasks_str = str(remainTasks)
+        Globals._WS.database_operation_signal.emit('upsert', {
+            'table_name': 'auto_creator',
+            'data': {
+                'id': data['id'],
+                'remainTasks': tasks_str,
+                'updateTime': datetime.fromtimestamp(time.time(), self.tz).strftime('%Y-%m-%d %H:%M:%S')
+            },
+            'unique_columns': ['id']
+        }, None)
+        Globals._WS.autoCreatorTab_update_row_signal.emit({
+            'id': data['id'],
+            'remainTasks': tasks_str,
+            'updateTime': datetime.fromtimestamp(time.time(), self.tz).strftime('%Y-%m-%d %H:%M:%S')
+        })
+        return tasks_str
 
     def processing(self, data):
         try:
@@ -645,30 +656,27 @@ class AutoCreatorWorker(QRunnable):
                 UserRequests.create_user(data['invitationCode'], param)
             elif method == 'super_create':
                 userId = UserRequests.create_user(data['invitationCode'], param)
-                tasks.append(self.make_recharge_task(userId))
-            elif method == 'recharge':
-                if not self.recharge(param):
-                    return
-                Globals._Log.info(self.user, f'processing: {param} recharge successfully')
-                tasks.append(self.make_consume_task(param))
+                tasks.append(self.make_consume_task(userId))
             elif method == 'consume':
-                UserRequests(param).consume_vip()
+                if UserRequests(param).consume_vip():
+                    data['total'] = str(int(data['total']) + Globals._CREATOR_STEP)
             else:
                 Globals._Log.error(self.user, f'Invalid method: {method}')
                 return
             
             del tasks[0]
+            updateTime = datetime.fromtimestamp(time.time(), self.tz).strftime('%Y-%m-%d %H:%M:%S')
             if not tasks:
                 data.update({
                     'remainTasks': '',
-                    'isCompleted': 1,
-                    'updateTime': datetime.fromtimestamp(time.time(), self.tz).strftime('%Y-%m-%d %H:%M:%S')
+                    'completeTime': updateTime,
+                    'updateTime': updateTime
                 })
             else:
                 remainTasks = sorted(tasks, key=lambda x: x[0])
                 data.update({
                     'remainTasks': str(remainTasks),
-                    'updateTime': datetime.fromtimestamp(time.time(), self.tz).strftime('%Y-%m-%d %H:%M:%S')
+                    'updateTime': updateTime
                 })
             self.reset_tasks(data)
 

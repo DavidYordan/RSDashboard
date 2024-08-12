@@ -270,11 +270,14 @@ class DBSchema(object):
                 "phone": "TEXT",
                 "invitationCode": "TEXT",
                 "isAgent": "BOOLEAN",
+                "isDaily": "BOOLEAN",
+                "total": "TEXT",
                 "startTime": "TEXT",
                 "endTime": "TEXT",
-                "expected": "INTEGER",
+                "expected_min": "TEXT",
+                "expected_max": "TEXT",
                 "remainTasks": "TEXT",
-                "isCompleted": "BOOLEAN",
+                "completeTime": "TEXT",
                 "updateTime": "TEXT"
             },
             "primary": "(id)"

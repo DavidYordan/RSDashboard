@@ -21,7 +21,6 @@ class WorkerSignals(QObject):
     agents_america_update_row_signal = pyqtSignal(dict)
     autoCreatorTab_add_creator_signal = pyqtSignal(dict)
     autoCreatorTab_update_row_signal = pyqtSignal(dict)
-    autoCreatorTab_update_task_signal = pyqtSignal(str, str)
     database_operation_signal = pyqtSignal(str, dict, object)
     progress_hide_signal = pyqtSignal(int)
     progress_reset_signal = pyqtSignal(str)
@@ -97,6 +96,7 @@ class Globals(QObject):
     _Bot = None
     _CLIENT_ID = ''
     _CLIENT_UUID = ''
+    _CREATOR_STEP = 0
     _FamilyTree = None
     _log_textedit = QTextEdit()
     _log_label = QLabel()
