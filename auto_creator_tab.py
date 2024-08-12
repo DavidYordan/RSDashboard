@@ -659,7 +659,7 @@ class AutoCreatorWorker(QRunnable):
                 tasks.append(self.make_consume_task(userId))
             elif method == 'consume':
                 if UserRequests(param).consume_vip():
-                    data['total'] = str(int(data['total']) + Globals._CREATOR_STEP)
+                    data['total'] = str(float(data['total']) + Globals._CREATOR_STEP)
             else:
                 Globals._Log.error(self.user, f'Invalid method: {method}')
                 return
