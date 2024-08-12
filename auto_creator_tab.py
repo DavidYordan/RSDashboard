@@ -18,6 +18,7 @@ from PyQt6.QtGui import (
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QApplication,
+    QCheckBox,
     QComboBox,
     QDateTimeEdit,
     QDialog,
@@ -47,6 +48,7 @@ class AutoCreatorTab(QWidget):
         q = Queue()
         Globals._WS.database_operation_signal.emit('get_table_fields', {'table_name': 'auto_creator'}, q)
         self.columns = q.get()
+        self.filter = True
 
         self.autoCreatorWorker = AutoCreatorWorker()
 
@@ -92,10 +94,23 @@ class AutoCreatorTab(QWidget):
                 return row
         return -1
 
+    def filter_chaged(self, state):
+        if state:
+            self.filter = True
+        else:
+            self.filter = False
+        self.reload()
+
     def reload(self):
         self.table.setRowCount(0)
         q = Queue()
-        Globals._WS.database_operation_signal.emit('read', {'table_name': 'auto_creator'}, q)
+        if self.filter:
+            Globals._WS.database_operation_signal.emit('read', {
+                'table_name': 'auto_creator',
+                'condition': 'completeTime = ""'
+            }, q)
+        else:
+            Globals._WS.database_operation_signal.emit('read', {'table_name': 'auto_creator'}, q)
 
         datas = q.get()
         for data in datas:
@@ -115,6 +130,10 @@ class AutoCreatorTab(QWidget):
         button_addCreator.clicked.connect(lambda: self.add_creator({}))
         top_layout.addWidget(button_addCreator)
         top_layout.addStretch()
+        checkbox_filter = QCheckBox('Filter')
+        checkbox_filter.setChecked(True)
+        checkbox_filter.stateChanged.connect(self.filter_chaged) 
+        top_layout.addWidget(checkbox_filter)
         button_reload = QPushButton('Reload')
         button_reload.clicked.connect(self.reload)
         top_layout.addWidget(button_reload)
@@ -156,7 +175,6 @@ class AutoCreatorTab(QWidget):
             'table_name': 'auto_creator',
             'data': {
                 'id': id,
-                'isDaily': 0,
                 'remainTasks': '',
                 'completeTime': completeTime,
                 'updateTime': completeTime
@@ -165,7 +183,6 @@ class AutoCreatorTab(QWidget):
         }, None)
         Globals._WS.autoCreatorTab_update_row_signal.emit({
             'id': id,
-            'isDaily': 0,
             'remainTasks': '',
             'completeTime': completeTime,
             'updateTime': completeTime
@@ -220,6 +237,13 @@ class AddCreatorDialog(QDialog):
 
         self.exec()
 
+    def days_changed(self, days):
+        current_datetime = QDateTime.currentDateTime()
+        self.timeedit_endTime.setDateTime(QDateTime(current_datetime.date().addDays(int(days)-1), QTime(22, 00)))
+
+    def expected_min_changed(self):
+        self.lineedit_expected_max.setText(self.lineedit_expected_min.text())
+
     def fill_data(self, data):
         Globals._WS.database_operation_signal.emit('read', {
             'table_name': 'auto_creator',
@@ -240,7 +264,7 @@ class AddCreatorDialog(QDialog):
         self.lineedit_expected_max.setText(str(data.get('expected', 1.5)))
         current_datetime = QDateTime.currentDateTime()
         self.timeedit_startTime.setDateTime(current_datetime)
-        self.timeedit_endTime.setDateTime(QDateTime(current_datetime.date(), QTime(23, 50)))
+        self.timeedit_endTime.setDateTime(QDateTime(current_datetime.date(), QTime(22, 00)))
 
     def is_agent_changed(self):
         if self.combo_isAgent.currentText() == '1':
@@ -294,7 +318,7 @@ class AddCreatorDialog(QDialog):
         layout.addLayout(layout_isAgent)
 
         layout_isDaily = QHBoxLayout()
-        layout_isDaily.addWidget(QLabel('Daily:'))
+        layout_isDaily.addWidget(QLabel('Is Daily:'))
         self.combo_isDaily = QComboBox(self)
         self.combo_isDaily.addItems(['0', '1'])
         layout_isDaily.addWidget(self.combo_isDaily)
@@ -338,6 +362,15 @@ class AddCreatorDialog(QDialog):
         self.lineedit_expected_max.setValidator(QDoubleValidator(1.5, 450, 1))
         layout_expected.addWidget(self.lineedit_expected_max)
         layout.addLayout(layout_expected)
+        self.lineedit_expected_min.textChanged.connect(self.expected_min_changed)
+
+        layout_days = QHBoxLayout()
+        for i in [1, 3, 7, 30, 60]:
+            button = QPushButton(str(i))
+            button.setFixedWidth(40)
+            button.clicked.connect(lambda _, i=i: self.days_changed(str(i)))
+            layout_days.addWidget(button)
+        layout.addLayout(layout_days)
 
         layout_button = QHBoxLayout()
         self.submit_validate = QPushButton('Validate')
@@ -503,7 +536,6 @@ class AutoCreatorWorker(QRunnable):
     def add_task(self, data):
         tasks_str = self.make_remain_tasks(data)
         if not tasks_str:
-            Globals._Log.error(self.user, f'add_task: Task format is incorrect: {data}')
             return
 
         try:
@@ -540,18 +572,7 @@ class AutoCreatorWorker(QRunnable):
     def get_tasks(self):
         Globals._WS.database_operation_signal.emit('read', {
             'table_name': 'auto_creator',
-            'condition': 'isDaily is TRUE'
-        }, self.queue_database)
-        data_list = self.queue_database.get()
-        for data in data_list:
-            data_dict = {}
-            for idx, col in enumerate(self.columns):
-                data_dict[col] = data[idx]
-            self.make_daily_task(data_dict)
-            
-        Globals._WS.database_operation_signal.emit('read', {
-            'table_name': 'auto_creator',
-            'condition': 'isDaily is NOT TRUE AND completeTime = ""'
+            'condition': 'completeTime = ""'
         }, self.queue_database)
         data_list = self.queue_database.get()
 
@@ -570,31 +591,16 @@ class AutoCreatorWorker(QRunnable):
         delay = random.randint(5, 300) + int(time.time())
         return [datetime.fromtimestamp(delay, self.tz).strftime('%Y-%m-%d %H:%M:%S'), 'consume', userId]
 
-    def make_daily_task(self, data):
-        endTime_date = datetime.strptime(data['endTime'], self.format_timestamp_str).date()
-        today_date = datetime.now(self.tz).date()
-        completeTime = data['completeTime']
-        completeTime_date = datetime.strptime(completeTime, self.format_timestamp_str).date() if completeTime else None
-        if completeTime_date and completeTime_date >= endTime_date:
-            Globals._WS.database_operation_signal.emit('upsert', {
-                'table_name': 'auto_creator',
-                'data': {
-                    'id': data['id'],
-                    'isDaily': 0
-                },
-                'unique_columns': ['id']
-            }, None)
-            Globals._WS.autoCreatorTab_update_row_signal.emit({
-                'id': data['id'],
-                'isDaily': 0
-            })
-            return
-        if today_date == completeTime_date:
-            return
-        if data['userId'] not in self.in_processing:
-            self.add_task(data)
-
     def make_remain_tasks(self, data):
+
+        def _complete_tasks(data):
+            updateTime = datetime.fromtimestamp(time.time(), self.tz).strftime('%Y-%m-%d %H:%M:%S')
+            data.update({
+                'remainTasks': '',
+                'completeTime': updateTime,
+                'updateTime': updateTime
+            })
+            self.reset_tasks(data)
 
         def _round_count(value):
             return max(0, int(value) + random.choices([-1, 0, 1], [0.2, 0.6, 0.2])[0])
@@ -602,24 +608,61 @@ class AutoCreatorWorker(QRunnable):
         tasks_str = data.get('remainTasks', '')
         if tasks_str:
             return tasks_str
+        
+        startTime = datetime.strptime(data['startTime'], self.format_timestamp_str).timestamp()
+        startTime_date = datetime.fromtimestamp(startTime, self.tz).date()
+        today_date = datetime.now(self.tz).date()
+        if today_date < startTime_date:
+            return ''
+        
+        endTime = datetime.strptime(data['endTime'], self.format_timestamp_str).timestamp()
+        endTime_date = datetime.fromtimestamp(endTime, self.tz).date()
+        tempTime = data['tempTime']
+        tempTime = datetime.strptime(tempTime, self.format_timestamp_str).date() if tempTime else None
+        if tempTime and tempTime >= endTime_date:
+            _complete_tasks(data)
+            return ''
+        if tempTime and tempTime >= today_date:
+            return ''
+        
+        isDaily = data['isDaily']
+        total = float(data['total'])
         excepted_min = float(data['expected_min'])
         excepted_max = float(data['expected_max'])
+        days = max(1, (endTime_date - today_date).days + 1)
         count_list = []
         count = 0
-        while count * Globals._CREATOR_STEP <= excepted_max:
-            if excepted_min <= count * Globals._CREATOR_STEP <= excepted_max:
-                count_list.append(count)
-            count += 1
-        count = random.choice(count_list)
+        if isDaily or days == 1:
+            while count * Globals._CREATOR_STEP <= excepted_max:
+                if excepted_min <= count * Globals._CREATOR_STEP <= excepted_max:
+                    count_list.append(count)
+                count += 1
+            if count_list:
+                count = random.choice(count_list)
+            else:
+                count = random.choice([count - 1, count])
+        else:
+            if total >= excepted_max:
+                _complete_tasks(data)
+                return ''
+            excepted_min = (excepted_min - total) / days
+            excepted_max = (excepted_max - total) / days
+            while count * Globals._CREATOR_STEP <= excepted_max:
+                if excepted_min <= count * Globals._CREATOR_STEP <= excepted_max:
+                    count_list.append(count)
+                count += 1
+            if count_list:
+                count = random.choice(count_list)
+            else:
+                count = random.choice([count - 1, count])
+            count = random.choices([count - 1, count, count + 1], [0.15, 0.7, 0.15])[0]
+        
         remain_count = random.uniform(count * 0.5, count * 1.5)
         email_count = random.uniform(0.6, 0.9) * remain_count
         phone_count = _round_count(remain_count - email_count)
         email_count = _round_count(email_count)
-        startTime = datetime.strptime(data['startTime'], self.format_timestamp_str).timestamp()
-        if data['isDaily'] == 1:
-            endTime = datetime.strptime(datetime.now(self.tz).strftime('%Y-%m-%d 23:50:00'), self.format_timestamp_str).timestamp()
-        else:
-            endTime = datetime.strptime(data['endTime'], self.format_timestamp_str).timestamp()
+        startTime = time.time()
+        endTime = datetime.strptime(datetime.now(self.tz).strftime('%Y-%m-%d 22:00:00'), self.format_timestamp_str).timestamp()
         tasks = []
         for i in range(count + phone_count + email_count):
             delay = random.uniform(startTime, endTime)
@@ -630,6 +673,13 @@ class AutoCreatorWorker(QRunnable):
             else:
                 tasks.append([datetime.fromtimestamp(delay, self.tz).strftime('%Y-%m-%d %H:%M:%S'), 'create', 'email'])
         remainTasks = sorted(tasks, key=lambda x: x[0])
+        if remainTasks:
+            last_time = datetime.strptime(remainTasks[-1][0], '%Y-%m-%d %H:%M:%S')
+        else:
+            last_time = datetime.now(self.tz)
+        completed_time = last_time + timedelta(seconds=360)
+        completed_time_str = completed_time.strftime('%Y-%m-%d %H:%M:%S')
+        remainTasks.append([completed_time_str, 'completed', completed_time_str])
         tasks_str = str(remainTasks)
         Globals._WS.database_operation_signal.emit('upsert', {
             'table_name': 'auto_creator',
@@ -660,24 +710,25 @@ class AutoCreatorWorker(QRunnable):
             elif method == 'consume':
                 if UserRequests(param).consume_vip():
                     data['total'] = str(float(data['total']) + Globals._CREATOR_STEP)
+            elif method == 'completed':
+                data.update({
+                    'remainTasks': '',
+                    'tempTime': param,
+                    'updateTime': datetime.fromtimestamp(time.time(), self.tz).strftime('%Y-%m-%d %H:%M:%S')
+                })
+                self.reset_tasks(data)
+                return
             else:
                 Globals._Log.error(self.user, f'Invalid method: {method}')
                 return
             
             del tasks[0]
             updateTime = datetime.fromtimestamp(time.time(), self.tz).strftime('%Y-%m-%d %H:%M:%S')
-            if not tasks:
-                data.update({
-                    'remainTasks': '',
-                    'completeTime': updateTime,
-                    'updateTime': updateTime
-                })
-            else:
-                remainTasks = sorted(tasks, key=lambda x: x[0])
-                data.update({
-                    'remainTasks': str(remainTasks),
-                    'updateTime': updateTime
-                })
+            remainTasks = sorted(tasks, key=lambda x: x[0])
+            data.update({
+                'remainTasks': str(remainTasks),
+                'updateTime': updateTime
+            })
             self.reset_tasks(data)
 
         except Exception as e:

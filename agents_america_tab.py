@@ -4,6 +4,7 @@ from PyQt6.QtCore import(
 )
 from PyQt6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QHBoxLayout,
     QHeaderView,
     QLineEdit,
@@ -32,6 +33,8 @@ class AgentsAmericaTab(QWidget):
         self.columns_display = [
             'team', 'userId', 'userName', 'mobile', 'inviterCode', 'agentCash', 'agentWithdrawCash', 'agentRate', 'agentType', 'createUserId', 'createTime'
         ]
+        self.filter = False
+        self.filter_agents = set()
 
         Globals._WS.agents_america_update_row_signal.connect(self.update_row)
 
@@ -99,12 +102,25 @@ class AgentsAmericaTab(QWidget):
     
         return None
     
+    def filter_chaged(self, state):
+        if state:
+            self.filter = True
+        else:
+            self.filter = False
+        self.reload()
+
     def reload(self):
         self.table.setRowCount(0)
+        if self.filter:
+            with open('config/filter_agents.txt', 'r') as file:
+                self.filter_agents = set(line.strip() for line in file if line.strip())
+            condition = 'isdeleted IS NOT TRUE AND userName IN (' + ','.join(f"'{user}'" for user in self.filter_agents) + ')'
+        else:
+            condition = 'isdeleted IS NOT TRUE'
         q = Queue()
         Globals._WS.database_operation_signal.emit('read', {
             'table_name': 'agents_america',
-            'condition': 'isdeleted IS NOT TRUE'
+            'condition': condition
         }, q)
 
         datas = q.get()
@@ -173,6 +189,10 @@ class AgentsAmericaTab(QWidget):
         button_update_all.clicked.connect(self.update_users)
         top_layout.addWidget(button_update_all)
         top_layout.addStretch()
+        checkbox_filter = QCheckBox('Filter')
+        checkbox_filter.setChecked(False)
+        checkbox_filter.stateChanged.connect(self.filter_chaged) 
+        top_layout.addWidget(checkbox_filter)
         button_reload = QPushButton('Reload')
         button_reload.clicked.connect(self.reload)
         top_layout.addWidget(button_reload)

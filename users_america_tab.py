@@ -8,6 +8,7 @@ from PyQt6.QtCore import(
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QApplication,
+    QCheckBox,
     QHBoxLayout,
     QHeaderView,
     QLineEdit,
@@ -43,6 +44,8 @@ class UsersAmericaTab(QWidget):
         self.columns_display = [
             'team', 'userId', 'phone', 'areaCode', 'fake', 'income', 'withdraw', 'recharge', 'jifen', 'money', 'invitations', 'invitationType', 'platform', 'inviterCode', 'invitationCode'
         ]
+        self.filter = True
+        self.filter_users = set()
 
         Globals._WS.users_america_update_row_signal.connect(self.update_row)
 
@@ -104,6 +107,13 @@ class UsersAmericaTab(QWidget):
                 return
             Globals.run_task(UserRequests.create_user, invitationCode=new_invitationCode.strip())
 
+    def filter_chaged(self, state):
+        if state:
+            self.filter = True
+        else:
+            self.filter = False
+        self.reload()
+
     def find_row_by_columnName(self, columnValue, columnName='userId'):
         column_index = self.columns_display.index(columnName)
         for row in range(self.table.rowCount()):
@@ -129,10 +139,16 @@ class UsersAmericaTab(QWidget):
     
     def reload(self):
         self.table.setRowCount(0)
+        if self.filter:
+            with open('config/filter_users.txt', 'r') as file:
+                self.filter_users = set(line.strip() for line in file if line.strip())
+            condition = 'isdeleted IS NOT TRUE AND phone IN (' + ','.join(f"'{user}'" for user in self.filter_users) + ')'
+        else:
+            condition = 'isdeleted IS NOT TRUE'
         q = Queue()
         Globals._WS.database_operation_signal.emit('read', {
             'table_name': 'users_america',
-            'condition': 'isdeleted IS NOT TRUE'
+            'condition': condition
         }, q)
         datas = q.get()
 
@@ -204,6 +220,10 @@ class UsersAmericaTab(QWidget):
         self.button_create_user.clicked.connect(self.create_user)
         top_layout.addWidget(self.button_create_user)
         top_layout.addStretch()
+        checkbox_filter = QCheckBox('Filter')
+        checkbox_filter.setChecked(True)
+        checkbox_filter.stateChanged.connect(self.filter_chaged) 
+        top_layout.addWidget(checkbox_filter)
         button_reload = QPushButton('Reload')
         button_reload.clicked.connect(self.reload)
         top_layout.addWidget(button_reload)
@@ -278,7 +298,11 @@ class UsersAmericaTab(QWidget):
 
         new_phone, ok = QInputDialog.getText(self, 'Phone', 'Please input phone:', text=phone)
         if ok and new_phone:
-            Globals.run_task(self.update_user_worker, phone=new_phone.strip())
+            phone = new_phone.strip()
+            self.filter_users.add(phone)
+            with open('config/filter_users.txt', 'w') as file:
+                file.write('\n'.join(self.filter_users))
+            Globals.run_task(self.update_user_worker, phone=phone)
 
     def update_user_worker(self, phone):
         Globals._Log.info(self.user, f'Starting {phone} update process.')

@@ -277,8 +277,9 @@ class DBSchema(object):
                 "expected_min": "TEXT",
                 "expected_max": "TEXT",
                 "remainTasks": "TEXT",
+                "tempTime": "TEXT",
                 "completeTime": "TEXT",
-                "updateTime": "TEXT"
+                "updateTime": "TEXT",
             },
             "primary": "(id)"
         },
