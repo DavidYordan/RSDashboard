@@ -28,6 +28,7 @@ class WorkerSignals(QObject):
     progress_update_signal = pyqtSignal(str)
     telegram_bot_signal = pyqtSignal(str, dict)
     users_america_update_row_signal = pyqtSignal(dict)
+    users_america_update_user_signal = pyqtSignal(str)
 
 class ProgressDialog(QDialog):
     def __init__(self, parent=None):

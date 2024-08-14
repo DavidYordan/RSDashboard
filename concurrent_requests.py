@@ -236,7 +236,7 @@ class UserRequests(object):
             'data': user,
             'unique_columns': ['userId']
         })
-        Globals._WS.users_america_update_row_signal.emit(user)
+        # Globals._WS.users_america_update_row_signal.emit(user)
         self.session.headers.update({'Token': self.token})
 
     def _get_token_from_database(self):
@@ -335,7 +335,7 @@ class UserRequests(object):
 
         password = PasswordGenerator.generate_password()
 
-        Globals._Log.info('create_user', f'Attempting to create user: {phone}')
+        Globals._Log.info('create_user', f'尝试创建用户: {phone}')
         user = UserRequests._retry(_register_user)
         
         if not user:
@@ -346,8 +346,8 @@ class UserRequests(object):
             'data': user
         }, None)
 
-        Globals._WS.users_america_update_row_signal.emit(user)
-        Globals._Log.info('create_user', f'User {phone} was created successfully')
+        # Globals._WS.users_america_update_row_signal.emit(user)
+        Globals._Log.info('create_user', f'成功创建用户: {phone}')
 
         return user['userId']
     
@@ -369,10 +369,10 @@ class UserRequests(object):
 
         try:
             orderId = self._retry(_get_orderId)['data']['ordersId']
-            Globals._Log.info(self.user, f'Order ID {orderId} retrieved successfully for {self.phone}.')
+            Globals._Log.info(self.user, f'{self.phone} 生成订单: {orderId}.')
             time.sleep(1)
             self._retry(lambda: _process_payment(orderId))
-            Globals._Log.info(self.user, f'VIP consumption processed successfully for {self.phone}.')
+            Globals._Log.info(self.user, f'{self.phone} 成功消费.')
             return True
         except Exception as e:
             Globals._Log.error('consume_vip', f'Failed to consume VIP for {self.phone}: {str(e)}')

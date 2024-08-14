@@ -717,6 +717,7 @@ class AutoCreatorWorker(QRunnable):
                     'updateTime': datetime.fromtimestamp(time.time(), self.tz).strftime('%Y-%m-%d %H:%M:%S')
                 })
                 self.reset_tasks(data)
+                Globals._WS.users_america_update_user_signal.emit(data['phone'])
                 return
             else:
                 Globals._Log.error(self.user, f'Invalid method: {method}')

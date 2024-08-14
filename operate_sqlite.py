@@ -411,6 +411,7 @@ class DBSchema(object):
                 "recharge": "TEXT",
                 "invitations": "TEXT",
                 "withdraw": "TEXT",
+                "withdraw_stay": "TEXT",
                 "income": "TEXT",
                 "isdeleted": "BOOLEAN",
                 "iscreator": "BOOLEAN",

@@ -1,5 +1,7 @@
 import datetime
+import os
 import pandas as pd
+import time
 
 from PyQt6.QtCore import(
     pyqtSlot,
@@ -42,12 +44,28 @@ class UsersAmericaTab(QWidget):
         self.columns_recharge = q.get()
 
         self.columns_display = [
-            'team', 'userId', 'phone', 'areaCode', 'fake', 'income', 'withdraw', 'recharge', 'jifen', 'money', 'invitations', 'invitationType', 'platform', 'inviterCode', 'invitationCode'
+            'team', 'userId', 'phone', 'areaCode', 'fake', 'income', 'withdraw', 'withdraw_stay', 'recharge', 'jifen', 'money', 'invitations', 'invitationType', 'platform', 'inviterCode', 'invitationCode'
         ]
         self.filter = True
+        self.filter_columns_map = {
+            'userId': 'userId',
+            'phone': 'phone',
+            'income': '收益',
+            'withdraw': '已提现',
+            'withdraw_stay': '提现中',
+            'recharge': '充值',
+            'jifen': '积分',
+            'money': '钱包余额',
+            'invitations': '邀请数量',
+            'invitationType': '是否分销',
+            'inviterCode': '上级邀请码',
+            'invitationCode': '邀请码'
+        }
         self.filter_users = set()
+        self.withdraw_update_time = 0
 
         Globals._WS.users_america_update_row_signal.connect(self.update_row)
+        Globals._WS.users_america_update_user_signal.connect(self.update_user_by_phone)
 
         self.user = 'UsersAmericaTab'
 
@@ -60,8 +78,8 @@ class UsersAmericaTab(QWidget):
         current_index = self.table.currentIndex()
         row = current_index.row()
         invitationType = self.table.item(row, self.columns_display.index('invitationType')).text()
-        if not invitationType:
-            Globals._Log.error(self.user, 'Distribution has not been activated.')
+        if invitationType == '0':
+            Globals._Log.error(self.user, '未开通分销.')
             return
         data = {
             'team': self.table.item(row, self.columns_display.index('team')).text(),
@@ -106,6 +124,27 @@ class UsersAmericaTab(QWidget):
                 Globals._Log.error(self.user, f'Unsupported agent: {new_invitationCode}')
                 return
             Globals.run_task(UserRequests.create_user, invitationCode=new_invitationCode.strip())
+
+    def export_filter(self):
+        now = time.time()
+        if now - self.withdraw_update_time >= 3600:
+            self.update_withdraw_and_recharge_worker()
+        if not self.filter_users:
+            Globals._Log.warning(self.user, 'No users to export.')
+            return
+        # for user in self.filter_users:
+        #     Globals.run_task(self.update_user_worker, phone=user)
+        q = Queue()
+        Globals._WS.database_operation_signal.emit('read', {
+            'table_name': 'users_america',
+            'condition': 'phone IN (' + ','.join(f"'{user}'" for user in self.filter_users) + ')'
+        }, q)
+        datas = q.get()
+        df = pd.DataFrame(datas, columns=self.columns)[self.filter_columns_map.keys()]
+        df.rename(columns=self.filter_columns_map, inplace=True)
+        now = datetime.datetime.now().strftime('%Y-%m-%d')
+        df.to_excel(f'filter_export_{now}.xlsx', sheet_name='users', index=False)
+        os.system(f'start filter_export_{now}.xlsx')
 
     def filter_chaged(self, state):
         if state:
@@ -288,6 +327,10 @@ class UsersAmericaTab(QWidget):
             cell_item = QTableWidgetItem(item_value)
             self.table.setItem(row, col_index, cell_item)
 
+    @pyqtSlot(str)
+    def update_user_by_phone(self, phone):
+        Globals.run_task(self.update_user_worker, phone=phone)
+
     def update_user(self):
         current_index = self.table.currentIndex()
         if current_index.isValid():
@@ -299,9 +342,10 @@ class UsersAmericaTab(QWidget):
         new_phone, ok = QInputDialog.getText(self, 'Phone', 'Please input phone:', text=phone)
         if ok and new_phone:
             phone = new_phone.strip()
-            self.filter_users.add(phone)
-            with open('config/filter_users.txt', 'w') as file:
-                file.write('\n'.join(self.filter_users))
+            if phone not in self.filter_users:
+                self.filter_users.add(phone)
+                with open('config/filter_users.txt', 'w') as file:
+                    file.write('\n'.join(self.filter_users))
             Globals.run_task(self.update_user_worker, phone=phone)
 
     def update_user_worker(self, phone):
@@ -438,13 +482,13 @@ class UsersAmericaTab(QWidget):
     def update_withdraw_and_recharge_to_users(self):
         q = Queue()
         Globals._WS.database_operation_signal.emit('read', {
-            'table_name': 'withdraw',
-            'condition': 'state=1'
+            'table_name': 'withdraw'
         }, q)
         data = q.get()
         df_withdraw = pd.DataFrame(data, columns=self.columns_withdraw)
-        df_withdraw['withdraw'] = df_withdraw['money'].astype(float).fillna(0)
-        summary_withdraw = df_withdraw.groupby('userId')['withdraw'].sum().reset_index()
+        df_withdraw['withdraw'] = df_withdraw[df_withdraw['state'] == 1]['money'].astype(float).fillna(0)
+        df_withdraw['withdraw_stay'] = df_withdraw[df_withdraw['state'] == 0]['money'].astype(float).fillna(0)
+        summary_withdraw = df_withdraw.groupby('userId').agg({'withdraw': 'sum', 'withdraw_stay': 'sum'}).reset_index()
 
         Globals._WS.database_operation_signal.emit('read', {
             'table_name': 'recharge',

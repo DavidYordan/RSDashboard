@@ -165,7 +165,9 @@ class RSDashboard(QMainWindow):
         self.action_autoCreatorWorker_run.triggered.connect(self.autoCreatorWorker_run)
         self.action_autoCreatorWorker_stop = QAction('Stop', self)
         self.action_autoCreatorWorker_stop.triggered.connect(self.autoCreatorWorker_stop)
-        menu_autoCreatorWorker.addActions([self.action_autoCreatorWorker_run, self.action_autoCreatorWorker_stop])
+        self.action_autoCreatorWorker_export = QAction('Export', self)
+        self.action_autoCreatorWorker_export.triggered.connect(self.export_filter)
+        menu_autoCreatorWorker.addActions([self.action_autoCreatorWorker_run, self.action_autoCreatorWorker_stop, self.action_autoCreatorWorker_export])
 
         menu_graph = menubar.addMenu('Graph')
         action_family_tree = QAction('FamilyTree', self)
@@ -234,6 +236,9 @@ class RSDashboard(QMainWindow):
         Globals._log_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         Globals._log_label.setMaximumHeight(300)
         # Globals._log_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+
+    def export_filter(self):
+        self.users_america_tab.export_filter()
 
     def autoCreatorWorker_run(self):
         if not self.auto_creator_tab.autoCreatorWorker.is_running:
