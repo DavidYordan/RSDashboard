@@ -48,6 +48,7 @@ class UsersAmericaTab(QWidget):
         ]
         self.filter = True
         self.filter_columns_map = {
+            'team': '团队',
             'userId': 'userId',
             'phone': 'phone',
             'income': '收益',
