@@ -239,7 +239,7 @@ class AddCreatorDialog(QDialog):
 
     def days_changed(self, days):
         current_datetime = QDateTime.currentDateTime()
-        self.timeedit_endTime.setDateTime(QDateTime(current_datetime.date().addDays(int(days)-1), QTime(22, 00)))
+        self.timeedit_endTime.setDateTime(QDateTime(current_datetime.date().addDays(int(days)-1), QTime(23, 00)))
         if days == '7':
             self.lineedit_decreasing.setText('0.6')
         else:
@@ -269,7 +269,7 @@ class AddCreatorDialog(QDialog):
         self.lineedit_decreasing.setText(str(data.get('decreasing', 0)))
         current_datetime = QDateTime.currentDateTime()
         self.timeedit_startTime.setDateTime(current_datetime)
-        self.timeedit_endTime.setDateTime(QDateTime(current_datetime.date(), QTime(22, 00)))
+        self.timeedit_endTime.setDateTime(QDateTime(current_datetime.date(), QTime(23, 00)))
 
     def is_agent_changed(self):
         if self.combo_isAgent.currentText() == '1':
@@ -701,7 +701,6 @@ class AutoCreatorWorker(QRunnable):
             else:
                 count = random.choice([count - 1, count])
         elif days == 1:
-            count = 0
             excepted = random.uniform(excepted_min, excepted_max)
             while count * Globals._CREATOR_STEP < excepted:
                 count += 1
@@ -734,7 +733,11 @@ class AutoCreatorWorker(QRunnable):
         phone_count = _round_count(remain_count - email_count)
         email_count = _round_count(email_count)
         startTime = time.time()
-        endTime = datetime.strptime(datetime.now(self.tz).strftime('%Y-%m-%d 22:00:00'), self.format_timestamp_str).timestamp()
+        if today_date != endTime_date:
+            endTime = datetime.strptime(datetime.now(self.tz).strftime('%Y-%m-%d 23:00:00'), self.format_timestamp_str).timestamp()
+        if startTime >= endTime:
+            endTime = startTime + 3600
+
         tasks = []
         for i in range(count + phone_count + email_count):
             delay = random.uniform(startTime, endTime)
