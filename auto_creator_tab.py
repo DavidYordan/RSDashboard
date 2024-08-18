@@ -464,14 +464,14 @@ class AddCreatorDialog(QDialog):
         def _caculate_allocation(start_date, end_date, total, decreasing):
             def _caculate(days, r, decreasing):
                 if days == 1:
-                    count = r // 1.5
+                    count = r // Globals._CREATOR_STEP
                     return int(random.choices([count, count+1], weights=[0.4, 0.6])[0])
                 while True:
                     days = days / 2
                     if days < 1:
                         break
                     r = r * decreasing
-                count = (r/(days*2))//1.5
+                count = (r/(days*2))//Globals._CREATOR_STEP
                 count = random.choices([count-1, count, count+1], weights=[0.1, 0.6, 0.3])[0]
                 return int(count)
             
@@ -482,8 +482,8 @@ class AddCreatorDialog(QDialog):
             remain = total
             for i in range(days_count, 0, -1):
                 count = _caculate(i, remain, decreasing)
-                remain -= count * 1.5
-                allocations.append(str(count * 1.5))
+                remain -= count * Globals._CREATOR_STEP
+                allocations.append(str(count * Globals._CREATOR_STEP))
             return ', '.join(allocations)
 
         self.submit_validate.setEnabled(False)
@@ -640,22 +640,16 @@ class AutoCreatorWorker(QRunnable):
 
     def make_remain_tasks(self, data):
 
-        def _caculate_today_allocation(end_date, remaining_total, today, decreasing):
-            days = (end_date - today).days + 1
-            if days == 1:
-                count = remaining_total // 1.5
-                return int(random.choices([count, count+1], weights=[0.4, 0.6])[0])
+        def _caculate_today_allocation(days, remaining_total, decreasing):
             remain = remaining_total
-            
+            d = days
             while True:
-                days = days / 2
-                if days < 1:
+                d = d / 2
+                if d < 1:
                     break
                 remain = remain * decreasing
-
-            count = (remain/(days*2))//1.5
+            count = (remain/(d*2))//Globals._CREATOR_STEP
             count = random.choices([count-1, count, count+1], weights=[0.1, 0.6, 0.3])[0]
-            
             return int(count)
 
         def _complete_tasks(data):
@@ -706,6 +700,11 @@ class AutoCreatorWorker(QRunnable):
                 count = random.choice(count_list)
             else:
                 count = random.choice([count - 1, count])
+        elif days == 1:
+            count = 0
+            excepted = random.uniform(excepted_min, excepted_max)
+            while count * Globals._CREATOR_STEP < excepted:
+                count += 1
         else:
             if total >= excepted_max:
                 _complete_tasks(data)
@@ -713,9 +712,8 @@ class AutoCreatorWorker(QRunnable):
             decreasing = float(data['decreasing'])
             if 0 < decreasing < 1:
                 count = _caculate_today_allocation(
-                    endTime_date,
+                    days,
                     random.uniform(excepted_min, excepted_max) - total,
-                    today_date,
                     decreasing
                 )
             else:
