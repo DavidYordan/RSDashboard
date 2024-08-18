@@ -127,9 +127,7 @@ class UsersAmericaTab(QWidget):
             Globals.run_task(UserRequests.create_user, invitationCode=new_invitationCode.strip())
 
     def export_filter(self):
-        now = time.time()
-        if now - self.withdraw_update_time >= 3600:
-            self.update_withdraw_and_recharge_worker()
+        self.update_withdraw_and_recharge_worker()
         if not self.filter_users:
             Globals._Log.warning(self.user, 'No users to export.')
             return
@@ -143,9 +141,14 @@ class UsersAmericaTab(QWidget):
         datas = q.get()
         df = pd.DataFrame(datas, columns=self.columns)[self.filter_columns_map.keys()]
         df.rename(columns=self.filter_columns_map, inplace=True)
+        for col in ['收益', '已提现', '提现中', '充值', '积分', '钱包余额', '邀请数量']:
+            df[col] = df[col].astype(float).fillna(0)
+        df.insert(df.columns.get_loc('收益'),  '总收益',  df['收益'] + df['已提现'] + df['提现中'])
         now = datetime.datetime.now().strftime('%Y-%m-%d')
-        df.to_excel(f'filter_export_{now}.xlsx', sheet_name='users', index=False)
-        os.system(f'start filter_export_{now}.xlsx')
+        if not os.path.exists('export'):
+            os.makedirs('export')
+        df.to_excel(f'export/filter_export_{now}.xlsx', sheet_name='users', index=False)
+        os.system(f'start export/filter_export_{now}.xlsx')
 
     def filter_chaged(self, state):
         if state:

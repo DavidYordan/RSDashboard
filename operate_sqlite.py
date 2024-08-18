@@ -271,6 +271,7 @@ class DBSchema(object):
                 "invitationCode": "TEXT",
                 "isAgent": "BOOLEAN",
                 "isDaily": "BOOLEAN",
+                "decreasing": "TEXT",
                 "total": "TEXT",
                 "startTime": "TEXT",
                 "endTime": "TEXT",

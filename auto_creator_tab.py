@@ -240,6 +240,10 @@ class AddCreatorDialog(QDialog):
     def days_changed(self, days):
         current_datetime = QDateTime.currentDateTime()
         self.timeedit_endTime.setDateTime(QDateTime(current_datetime.date().addDays(int(days)-1), QTime(22, 00)))
+        if days == '7':
+            self.lineedit_decreasing.setText('0.6')
+        else:
+            self.lineedit_decreasing.setText('0')
 
     def expected_min_changed(self):
         self.lineedit_expected_max.setText(self.lineedit_expected_min.text())
@@ -262,6 +266,7 @@ class AddCreatorDialog(QDialog):
         self.combo_isAgent.setCurrentText(str(data.get('isAgent', 0)))
         self.lineedit_expected_min.setText(str(data.get('expected', 1.5)))
         self.lineedit_expected_max.setText(str(data.get('expected', 1.5)))
+        self.lineedit_decreasing.setText(str(data.get('decreasing', 0)))
         current_datetime = QDateTime.currentDateTime()
         self.timeedit_startTime.setDateTime(current_datetime)
         self.timeedit_endTime.setDateTime(QDateTime(current_datetime.date(), QTime(22, 00)))
@@ -364,6 +369,13 @@ class AddCreatorDialog(QDialog):
         layout.addLayout(layout_expected)
         self.lineedit_expected_min.textChanged.connect(self.expected_min_changed)
 
+        layout_decreasing = QHBoxLayout()
+        layout_decreasing.addWidget(QLabel('Decreasing:'))
+        self.lineedit_decreasing = QLineEdit(self)
+        self.lineedit_decreasing.setValidator(QDoubleValidator(0, 1, 2))
+        layout_decreasing.addWidget(self.lineedit_decreasing)
+        layout.addLayout(layout_decreasing)
+
         layout_days = QHBoxLayout()
         for i in [1, 3, 7, 30, 60]:
             button = QPushButton(str(i))
@@ -379,6 +391,11 @@ class AddCreatorDialog(QDialog):
         self.submit_button.setEnabled(False)
         layout_button.addWidget(self.submit_button)
         layout.addLayout(layout_button)
+
+        layout_logger = QHBoxLayout()
+        self.label_logger = QLabel(self)
+        layout_logger.addWidget(self.label_logger)
+        layout.addLayout(layout_logger)
 
         self.submit_validate.clicked.connect(self.validate)
         self.submit_button.clicked.connect(self.submit_data)
@@ -406,6 +423,7 @@ class AddCreatorDialog(QDialog):
             'invitationCode': invitationCode,
             'isAgent': isAgent,
             'isDaily': int(self.combo_isDaily.currentText()),
+            'decreasing': self.lineedit_decreasing.text(),
             'total': "0",
             'expected_min': self.lineedit_expected_min.text(),
             'expected_max': self.lineedit_expected_max.text(),
@@ -442,6 +460,32 @@ class AddCreatorDialog(QDialog):
         self.accept()
 
     def validate(self):
+
+        def _caculate_allocation(start_date, end_date, total, decreasing):
+            def _caculate(days, r, decreasing):
+                if days == 1:
+                    count = r // 1.5
+                    return int(random.choices([count, count+1], weights=[0.4, 0.6])[0])
+                while True:
+                    days = days / 2
+                    if days < 1:
+                        break
+                    r = r * decreasing
+                count = (r/(days*2))//1.5
+                count = random.choices([count-1, count, count+1], weights=[0.1, 0.6, 0.3])[0]
+                return int(count)
+            
+            if decresing <= 0 or decresing >= 1:
+                return ''
+            days_count = (end_date - start_date).days + 1
+            allocations = []
+            remain = total
+            for i in range(days_count, 0, -1):
+                count = _caculate(i, remain, decreasing)
+                remain -= count * 1.5
+                allocations.append(str(count * 1.5))
+            return ', '.join(allocations)
+
         self.submit_validate.setEnabled(False)
         try:
             phone = self.lineedit_phone.text()
@@ -505,6 +549,9 @@ class AddCreatorDialog(QDialog):
             if res:
                 Globals._Log.error(self.user, f'Validation failed: Uncompleted tasks detected: {res}')
                 return
+            
+            decresing = float(self.lineedit_decreasing.text())
+            self.label_logger.setText(_caculate_allocation(start_time, end_time, expected_max, decresing))
             
             self.submit_button.setEnabled(True)
             
@@ -593,6 +640,24 @@ class AutoCreatorWorker(QRunnable):
 
     def make_remain_tasks(self, data):
 
+        def _caculate_today_allocation(end_date, remaining_total, today, decreasing):
+            days = (end_date - today).days + 1
+            if days == 1:
+                count = remaining_total // 1.5
+                return int(random.choices([count, count+1], weights=[0.4, 0.6])[0])
+            remain = remaining_total
+            
+            while True:
+                days = days / 2
+                if days < 1:
+                    break
+                remain = remain * decreasing
+
+            count = (remain/(days*2))//1.5
+            count = random.choices([count-1, count, count+1], weights=[0.1, 0.6, 0.3])[0]
+            
+            return int(count)
+
         def _complete_tasks(data):
             updateTime = datetime.fromtimestamp(time.time(), self.tz).strftime('%Y-%m-%d %H:%M:%S')
             data.update({
@@ -632,7 +697,7 @@ class AutoCreatorWorker(QRunnable):
         days = max(1, (endTime_date - today_date).days + 1)
         count_list = []
         count = 0
-        if isDaily or days == 1:
+        if isDaily:
             while count * Globals._CREATOR_STEP <= excepted_max:
                 if excepted_min <= count * Globals._CREATOR_STEP <= excepted_max:
                     count_list.append(count)
@@ -645,19 +710,28 @@ class AutoCreatorWorker(QRunnable):
             if total >= excepted_max:
                 _complete_tasks(data)
                 return ''
-            excepted_min = (excepted_min - total) / days
-            excepted_max = (excepted_max - total) / days
-            while count * Globals._CREATOR_STEP <= excepted_max:
-                if excepted_min <= count * Globals._CREATOR_STEP <= excepted_max:
-                    count_list.append(count)
-                count += 1
-            if count_list:
-                count = random.choice(count_list)
+            decreasing = float(data['decreasing'])
+            if 0 < decreasing < 1:
+                count = _caculate_today_allocation(
+                    endTime_date,
+                    random.uniform(excepted_min, excepted_max) - total,
+                    today_date,
+                    decreasing
+                )
             else:
-                count = random.choice([count - 1, count])
-            count = random.choices([count - 1, count, count + 1], [0.15, 0.7, 0.15])[0]
+                excepted_min = (excepted_min - total) / days
+                excepted_max = (excepted_max - total) / days
+                while count * Globals._CREATOR_STEP <= excepted_max:
+                    if excepted_min <= count * Globals._CREATOR_STEP <= excepted_max:
+                        count_list.append(count)
+                    count += 1
+                if count_list:
+                    count = random.choice(count_list)
+                else:
+                    count = random.choice([count - 1, count])
+                count = random.choices([count - 1, count, count + 1], [0.15, 0.7, 0.15])[0]
         
-        remain_count = random.uniform(count * 0.5, count * 1.5)
+        remain_count = random.uniform(count * 0.2, count * 1)
         email_count = random.uniform(0.6, 0.9) * remain_count
         phone_count = _round_count(remain_count - email_count)
         email_count = _round_count(email_count)
