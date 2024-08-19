@@ -143,7 +143,7 @@ class UsersAmericaTab(QWidget):
         df.rename(columns=self.filter_columns_map, inplace=True)
         for col in ['收益', '已提现', '提现中', '充值', '积分', '钱包余额', '邀请数量']:
             df[col] = df[col].astype(float).fillna(0)
-        df.insert(df.columns.get_loc('收益'),  '总收益',  df['收益'] + df['已提现'])
+        df.insert(df.columns.get_loc('收益'),  '总收益',  df['收益'] + df['已提现'] + df['提现中'])
         now = datetime.datetime.now().strftime('%Y-%m-%d')
         if not os.path.exists('export'):
             os.makedirs('export')
