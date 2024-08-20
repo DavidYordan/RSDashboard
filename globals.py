@@ -57,6 +57,7 @@ class ProgressDialog(QDialog):
             self.current_count += count
             self.update_progres()
         if self.current_count >= self.total_count and self.isVisible():
+            Globals._UsersUpdating = False
             super().hide()
 
     @pyqtSlot(str)
@@ -71,6 +72,7 @@ class ProgressDialog(QDialog):
             self.total_count += count
             self.update_progres()
         if not self.isVisible():
+            Globals._UsersUpdating = True
             super().show()
 
     @pyqtSlot(str)
@@ -108,6 +110,7 @@ class Globals(QObject):
     _TELEGRAM_BOT_TOKEN = ''
     _TELEGRAM_CHATID = ''
     _TO_CAPTCHA_KEY = ''
+    _UsersUpdating = False
     _WS = WorkerSignals()
     accounts_dict = {}
     binging_dict = {}

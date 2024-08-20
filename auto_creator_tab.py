@@ -702,7 +702,7 @@ class AutoCreatorWorker(QRunnable):
                 count = random.choice([count - 1, count])
         elif days == 1:
             excepted = random.uniform(excepted_min, excepted_max)
-            while count * Globals._CREATOR_STEP < excepted:
+            while count * Globals._CREATOR_STEP < excepted - total:
                 count += 1
         else:
             if total >= excepted_max:

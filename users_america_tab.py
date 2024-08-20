@@ -1,7 +1,6 @@
 import datetime
 import os
 import pandas as pd
-import time
 
 from PyQt6.QtCore import(
     pyqtSlot,
@@ -127,12 +126,12 @@ class UsersAmericaTab(QWidget):
             Globals.run_task(UserRequests.create_user, invitationCode=new_invitationCode.strip())
 
     def export_filter(self):
-        self.update_withdraw_and_recharge_worker()
+        # self.update_withdraw_and_recharge_worker()
         if not self.filter_users:
             Globals._Log.warning(self.user, 'No users to export.')
             return
-        # for user in self.filter_users:
-        #     Globals.run_task(self.update_user_worker, phone=user)
+        # self.update_filtered_users()
+        # wait Globals._UsersUpdating=True
         q = Queue()
         Globals._WS.database_operation_signal.emit('read', {
             'table_name': 'users_america',
@@ -256,6 +255,10 @@ class UsersAmericaTab(QWidget):
         self.button_update_all = QPushButton('Update All Users')
         self.button_update_all.clicked.connect(self.update_users)
         top_layout.addWidget(self.button_update_all)
+        self.button_update_all.setEnabled(False)
+        self.button_update_filtered = QPushButton('Update Filtered Users')
+        self.button_update_filtered.clicked.connect(self.update_filtered_users)
+        top_layout.addWidget(self.button_update_filtered)
         button_update_one = QPushButton('Update User')
         button_update_one.clicked.connect(self.update_user)
         top_layout.addWidget(button_update_one)
@@ -315,6 +318,16 @@ class UsersAmericaTab(QWidget):
             self.show_context_menu(event.pos(), index)
         else:
             TableWidget.mousePressEvent(self.table, event)
+
+    def update_filtered_users(self):
+        Globals._Log.info(self.user, 'Starting filtered users update process.')
+        Globals._WS.progress_reset_signal.emit('Updating filtered users')
+        Globals._WS.progress_show_signal.emit(len(self.filter_users))
+        Globals._WS.progress_update_signal.emit('waiting for update...')
+        for idx, phone in enumerate(self.filter_users):
+            Globals._WS.progress_update_signal.emit(f'waiting for update({idx+1})...')
+            Globals.run_task(self.update_user_worker, phone=phone)
+        self.update_withdraw_and_recharge_worker()
 
     @pyqtSlot(dict)
     def update_row(self, data):
@@ -380,11 +393,14 @@ class UsersAmericaTab(QWidget):
             }, None)
             
             Globals._WS.users_america_update_row_signal.emit(user_info)
-            Globals._WS.progress_hide_signal.emit(1)
+            
             Globals._Log.info(self.user, f'Updated user data of {phone} successfully.')
 
         except Exception as e:
             Globals._Log.error(self.user, f'Failed to update user data of {phone}: {e}')
+
+        finally:
+            Globals._WS.progress_hide_signal.emit(1)
 
     def update_users(self):
         self.button_update_all.setEnabled(False)
@@ -515,4 +531,3 @@ class UsersAmericaTab(QWidget):
 
         Globals._Log.info(self.user, 'Update withdraw and recharge to users_america successfully.')
         self.reload()
-        self.button_update_all.setEnabled(True)
