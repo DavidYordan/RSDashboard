@@ -17,9 +17,9 @@ from PyQt6.QtCore import (
 from queue import Empty, Queue
 from twocaptcha import TwoCaptcha
 from urllib.parse import quote
-from uuid import uuid4
 
 from globals import Globals
+from prefix import prefix_en_US, prefix_zh_TW
 
 class AdminRequests(object):
     class TokenManager(object):
@@ -111,7 +111,6 @@ class AdminRequests(object):
                         print(token_response)
 
                         if token:
-                            q = Queue()
                             Globals._Log.info(self.user, f'Token acquired successfully.')
                             self.session.headers.update({'Token': token})
                             token_name = 'america_token'
@@ -120,8 +119,7 @@ class AdminRequests(object):
                                 'columns': ['name', 'token', 'expire'],
                                 'values': [token_name, token, int(time.time()+token_response.get('expire', 0))],
                                 'unique_columns': ['name']
-                            }, q)
-                            q.get()
+                            }, None)
                             Globals._Log.info(self.user, f'successed to acquire token for admin.')
                         else:
                             Globals._Log.error(self.user, f'Failed to acquire token for admin.')
@@ -235,7 +233,7 @@ class UserRequests(object):
             'table_name': 'users_america',
             'data': user,
             'unique_columns': ['userId']
-        })
+        }, None)
         # Globals._WS.users_america_update_row_signal.emit(user)
         self.session.headers.update({'Token': self.token})
 
@@ -287,7 +285,7 @@ class UserRequests(object):
                     raise
 
     @staticmethod
-    def create_user(invitationCode='', style='phone'):
+    def create_user(invitationCode='', style='phone_Taiwan'):
 
         def _register_user():
             if '|' in invitationCode:
@@ -326,10 +324,16 @@ class UserRequests(object):
             user['token'] = data.get('token')
             return user
         
-        if style == 'phone':
-            phone = PhoneGenerator.generate_phone()
-        elif style == 'email':
-            phone = EmailGenerator.generate_email()
+        def _regoin_maps(regoin):
+            return {
+                'America': 'en_US',
+                'Taiwan': 'zh_TW'
+            }[regoin]
+        
+        if 'phone' in style:
+            phone = PhoneGenerator.generate_phone(_regoin_maps(style[6:]))
+        elif 'email' in style:
+            phone = EmailGenerator.generate_email(_regoin_maps(style[6:]))
         else:
             raise ValueError(f'Unsupported style: {style}')
 
@@ -379,16 +383,8 @@ class UserRequests(object):
             return False
     
 class EmailGenerator(object):
-    fake = Faker('zh_TW')
-    digits_options = [
-        '',
-        random.choice(string.digits),
-        ''.join(random.choices(string.digits, k=2)),
-        ''.join(random.choices(string.digits, k=3)),
-        ''.join(random.choices(string.digits, k=4))
-    ]
     digits_weights = [0.1, 0.2, 0.3, 0.3, 0.1]
-    weights = {
+    weights_zh_TW = {
         '@gmail.com': 0.45,
         '@yahoo.com.tw': 0.2,
         '@seed.net.tw': 0.05,
@@ -410,26 +406,48 @@ class EmailGenerator(object):
         '@mail2000.com.tw': 0.03,
         '@ebizprise.com': 0.01
     }
+    weights_en_US = {
+        '@gmail.com': 0.35,
+        '@yahoo.com': 0.2,
+        '@outlook.com': 0.15,
+        '@hotmail.com': 0.1,
+        '@aol.com': 0.05,
+        '@icloud.com': 0.05,
+        '@mail.com': 0.03,
+        '@protonmail.com': 0.03,
+        '@zoho.com': 0.02,
+        '@gmx.com': 0.02,
+        '@yandex.com': 0.02,
+        '@inbox.com': 0.01,
+        '@mailfence.com': 0.01,
+        '@usa.com': 0.01
+    }
 
     @staticmethod
     def _get_pinyin(name):
         return ''.join([x[0] for x in pinyin(name, style=Style.NORMAL)])
 
     @staticmethod
-    def _split_name(name):
-        return [EmailGenerator._get_pinyin(char) for char in name]
+    def _split_name(name, region):
+        if region == 'zh_TW':
+            return [EmailGenerator._get_pinyin(char) for char in name]
+        return list(name)
 
     @staticmethod
     def _append_random_digits(base):
-        return base + ''.join(random.choices(EmailGenerator.digits_options, EmailGenerator.digits_weights, k=1))
+        digits_options = [
+            '',
+            ''.join(random.choice(string.digits)),
+            ''.join(random.choices(string.digits, k=2)),
+            ''.join(random.choices(string.digits, k=3)),
+            ''.join(random.choices(string.digits, k=4))
+        ]
+        return base + ''.join(random.choices(digits_options, EmailGenerator.digits_weights, k=1))
 
     @staticmethod
-    def _generate_username():
-        random.seed(str(uuid4()))
-        first_name = EmailGenerator.fake.first_name()
-        last_name = EmailGenerator.fake.last_name()
-        fn_pinyin = EmailGenerator._split_name(first_name)
-        ln_pinyin = EmailGenerator._split_name(last_name)
+    def _generate_username(first_name, last_name, region):
+        fn_processed = EmailGenerator._split_name(first_name, region)
+        ln_processed = EmailGenerator._split_name(last_name, region)
 
         strategies = [
             lambda fn, ln: EmailGenerator._append_random_digits(ln[0] + ''.join(fn)),
@@ -446,11 +464,12 @@ class EmailGenerator(object):
         username = ''
         while len(username) < 6:
             choice = random.choices(strategies, weights=[0.1] * 9, k=1)[0]
-            username += choice(fn_pinyin, ln_pinyin).lower()
+            username += choice(fn_processed, ln_processed).lower()
 
         min_length = 8
         if len(username) < min_length:
-            username += ''.join(random.choices(string.digits, k=min_length - len(username)))
+            diff = min_length - len(username)
+            username += ''.join(random.choices(string.digits, k=int(random.uniform(diff, diff + 2))))
 
         if not username[0].isalpha():
             username = random.choice(string.ascii_lowercase) + username[1:]
@@ -458,9 +477,18 @@ class EmailGenerator(object):
         return username
 
     @staticmethod
-    def generate_email():
-        username = EmailGenerator._generate_username()
-        domain = random.choices(list(EmailGenerator.weights.keys()), weights=list(EmailGenerator.weights.values()), k=1)[0]
+    def generate_email(region='zh_TW'):
+        if region == 'en_US':
+            fake = Faker('en_US')
+            weights = EmailGenerator.weights_en_US
+        else:
+            fake = Faker('zh_TW')
+            weights = EmailGenerator.weights_zh_TW
+            
+        first_name = fake.first_name()
+        last_name = fake.last_name()
+        username = EmailGenerator._generate_username(first_name, last_name, region)
+        domain = random.choices(list(weights.keys()), weights=list(weights.values()), k=1)[0]
         return f'{username}{domain}'
     
 class PasswordGenerator(object):
@@ -472,21 +500,16 @@ class PasswordGenerator(object):
         return password
     
 class PhoneGenerator(object):
-    length = 10
-    prefix = [
-        '0939', '0958', '0980', '0916', '0930', '0988', '0987', '0975', '0926', '0920', 
-        '0972', '0911', '0917', '0936', '0989', '0931', '0937', '0981', '0983', '0905', 
-        '0903', '0909', '0910', '0912', '0913', '0914', '0915', '0918', '0919', '0921', 
-        '0922', '0923', '0925', '0927', '0928', '0929', '0932', '0933', '0934', '0935', 
-        '0938', '0940', '0941', '0943', '0945', '0948', '0952', '0953', '0955', '0956', 
-        '0957', '0960', '0961', '0963', '0965', '0966', '0968', '0970', '0971', '0973', 
-        '0974', '0976', '0977', '0978', '0979', '0982', '0984', '0985', '0986', '0990', 
-        '0991', '0992', '0993', '0995', '0996', '0998'
-    ]
+    length_zh_TW = 10
+    length_en_US = 10
 
     @staticmethod
-    def generate_phone():
-        prefix = random.choice(PhoneGenerator.prefix)
-        remaining_length = PhoneGenerator.length - len(prefix)
+    def generate_phone(regoin):
+        if regoin == 'zh_TW':
+            prefix = random.choice(prefix_zh_TW)
+            remaining_length = PhoneGenerator.length_zh_TW - len(prefix)
+        else:
+            prefix = random.choice(prefix_en_US)
+            remaining_length = PhoneGenerator.length_en_US - len(prefix)
         remaining_digits = ''.join(random.choices('0123456789', k=remaining_length))
         return prefix + remaining_digits

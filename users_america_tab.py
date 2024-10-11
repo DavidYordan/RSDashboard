@@ -43,11 +43,12 @@ class UsersAmericaTab(QWidget):
         self.columns_recharge = q.get()
 
         self.columns_display = [
-            'team', 'userId', 'phone', 'areaCode', 'fake', 'income', 'withdraw', 'withdraw_stay', 'recharge', 'jifen', 'money', 'invitations', 'invitationType', 'platform', 'inviterCode', 'invitationCode'
+            'team', 'regoin', 'userId', 'phone', 'areaCode', 'fake', 'income', 'withdraw', 'withdraw_stay', 'recharge', 'jifen', 'money', 'invitations', 'invitationType', 'platform', 'inviterCode', 'invitationCode'
         ]
         self.filter = True
         self.filter_columns_map = {
             'team': '团队',
+            'regoin': '区域',
             'userId': 'userId',
             'phone': 'phone',
             'income': '收益',
@@ -83,6 +84,7 @@ class UsersAmericaTab(QWidget):
             return
         data = {
             'team': self.table.item(row, self.columns_display.index('team')).text(),
+            'regoin': self.table.item(row, self.columns_display.index('regoin')).text(),
             'userId': self.table.item(row, self.columns_display.index('userId')).text(),
             'phone': self.table.item(row, self.columns_display.index('phone')).text(),
             'invitationCode': self.table.item(row, self.columns_display.index('invitationCode')).text()

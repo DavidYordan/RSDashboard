@@ -258,7 +258,8 @@ class DBSchema(object):
                 "isdeleted": "BOOLEAN",
                 "iscreator": "BOOLEAN",
                 "realpassword": "TEXT",
-                "token": "TEXT"
+                "token": "TEXT",
+                "regoin": "TEXT"
             },
             "primary": "(userId)"
         },
@@ -266,6 +267,7 @@ class DBSchema(object):
             "columns": {
                 "id": "INTEGER",
                 "team": "TEXT",
+                "regoin": "TEXT",
                 "userId": "INTEGER",
                 "phone": "TEXT",
                 "invitationCode": "TEXT",
@@ -419,7 +421,8 @@ class DBSchema(object):
                 "realpassword": "TEXT",
                 "token": "TEXT",
                 "areaCode": "INTEGER",
-                "fake": "INTEGER"
+                "fake": "INTEGER",
+                "regoin": "TEXT"
             },
             "primary": "(userId)"
         },

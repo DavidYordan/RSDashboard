@@ -224,6 +224,7 @@ class AddCreatorDialog(QDialog):
         self.setup_ui()
         self.fill_data(data)
         self.lineedit_team.textChanged.connect(self.validate_changed)
+        self.combo_regoin.currentTextChanged.connect(self.validate_changed)
         self.lineedit_phone.textChanged.connect(self.validate_changed)
         self.combo_isAgent.currentTextChanged.connect(self.validate_changed)
         self.timeedit_startTime.dateTimeChanged.connect(self.validate_changed)
@@ -260,6 +261,7 @@ class AddCreatorDialog(QDialog):
         else:
             self.label_id.setText(str(res[0][0]+1))
         self.lineedit_team.setText(data.get('team', ''))
+        self.combo_regoin.setCurrentText(data.get('regoin', ''))
         self.label_userId.setText(str(data.get('userId', '')))
         self.lineedit_phone.setText(data.get('phone', ''))
         self.label_invitationCode.setText(data.get('invitationCode', ''))
@@ -294,6 +296,13 @@ class AddCreatorDialog(QDialog):
         self.lineedit_team.textChanged.connect(self.strip_team)
         layout_team.addWidget(self.lineedit_team)
         layout.addLayout(layout_team)
+        
+        layout_regoin = QHBoxLayout()
+        layout_regoin.addWidget(QLabel('Regoin'))
+        self.combo_regoin = QComboBox(self)
+        self.combo_regoin.addItems(['', 'America', 'Taiwan'])
+        layout_regoin.addWidget(self.combo_regoin)
+        layout.addLayout(layout_regoin)
 
         layout_userId = QHBoxLayout()
         layout_userId.addWidget(QLabel('userId:'))
@@ -418,6 +427,7 @@ class AddCreatorDialog(QDialog):
         data = {
             'id': int(self.label_id.text()),
             'team': self.lineedit_team.text(),
+            'regoin': self.combo_regoin.currentText(),
             'userId': int(self.label_userId.text()),
             'phone': self.lineedit_phone.text(),
             'invitationCode': invitationCode,
@@ -437,7 +447,7 @@ class AddCreatorDialog(QDialog):
             'data': data
         }, None)
 
-        team_data = {key: data[key] for key in ['userId', 'team']}
+        team_data = {key: data[key] for key in ['userId', 'team', 'regoin']}
         if isAgent:
             Globals._WS.database_operation_signal.emit('upsert', {
                 'table_name': 'agents_america',
@@ -500,6 +510,11 @@ class AddCreatorDialog(QDialog):
             expected_max = float(self.lineedit_expected_max.text())
             if expected_min > expected_max:
                 Globals._Log.error(self.user, f'validate: expected min must be less than expected max.')
+                return
+            
+            regoin = self.combo_regoin.currentText()
+            if not regoin:
+                Globals._Log.error(self.user, f'Validation failed: Regoin is a required field.')
                 return
 
             isAgent = int(self.combo_isAgent.currentText())
@@ -685,6 +700,7 @@ class AutoCreatorWorker(QRunnable):
             return ''
         
         isDaily = data['isDaily']
+        regoin = data['regoin']
         total = float(data['total'])
         excepted_min = float(data['expected_min'])
         excepted_max = float(data['expected_max'])
@@ -742,11 +758,11 @@ class AutoCreatorWorker(QRunnable):
         for i in range(count + phone_count + email_count):
             delay = random.uniform(startTime, endTime)
             if i < count:
-                tasks.append([datetime.fromtimestamp(delay, self.tz).strftime('%Y-%m-%d %H:%M:%S'), 'super_create', 'phone'])
+                tasks.append([datetime.fromtimestamp(delay, self.tz).strftime('%Y-%m-%d %H:%M:%S'), 'super_create', f'phone_{regoin}'])
             elif i < count + phone_count:
-                tasks.append([datetime.fromtimestamp(delay, self.tz).strftime('%Y-%m-%d %H:%M:%S'), 'create', 'phone'])
+                tasks.append([datetime.fromtimestamp(delay, self.tz).strftime('%Y-%m-%d %H:%M:%S'), 'create', f'phone_{regoin}'])
             else:
-                tasks.append([datetime.fromtimestamp(delay, self.tz).strftime('%Y-%m-%d %H:%M:%S'), 'create', 'email'])
+                tasks.append([datetime.fromtimestamp(delay, self.tz).strftime('%Y-%m-%d %H:%M:%S'), 'create', f'email_{regoin}'])
         remainTasks = sorted(tasks, key=lambda x: x[0])
         if remainTasks:
             last_time = datetime.strptime(remainTasks[-1][0], '%Y-%m-%d %H:%M:%S')
